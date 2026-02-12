@@ -1,5 +1,7 @@
 # Devialet Phantom Control (IP Control + uv)
 
+[![Coverage](https://clementperon.github.io/devialet-phantom-ctl/badges/coverage.svg)](https://github.com/clementperon/devialet-phantom-ctl/actions/workflows/ci.yml)
+
 Python CLI and daemon to control Devialet Phantom volume over local HTTP API.
 
 Use cases:
