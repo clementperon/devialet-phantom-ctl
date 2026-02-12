@@ -68,10 +68,12 @@ class MdnsDiscoveryGateway(DiscoveryPort):
 
     def discover(self, timeout_s: float = 3.0) -> list[Target]:
         zc = Zeroconf()
-        listener = _Listener()
-        ServiceBrowser(zc, self.service_type, listener)
-        time.sleep(timeout_s)
-        zc.close()
+        try:
+            listener = _Listener()
+            ServiceBrowser(zc, self.service_type, listener)
+            time.sleep(timeout_s)
+        finally:
+            zc.close()
 
         uniq: dict[tuple[str, int, str], MdnsService] = {}
         for s in listener.services:

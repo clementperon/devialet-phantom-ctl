@@ -46,7 +46,10 @@ class CecClientAdapter:
             text=True,
             bufsize=1,
         )
-        assert proc.stdout is not None
+        if proc.stdout is None:
+            if proc.poll() is None:
+                proc.terminate()
+            raise RuntimeError("cec-client did not expose a readable stdout pipe")
 
         try:
             for line in proc.stdout:
