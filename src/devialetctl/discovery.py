@@ -11,7 +11,10 @@ class DevialetService:
     port: int
     base_path: str  # e.g. "/ipcontrol/v1"
 
-def discover(timeout_s: float = 3.0, service_type: str = "_http._tcp.local.") -> List[DevialetService]:
+
+def discover(
+    timeout_s: float = 3.0, service_type: str = "_http._tcp.local."
+) -> List[DevialetService]:
     gateway = MdnsDiscoveryGateway(service_type=service_type)
     results = gateway.discover(timeout_s=timeout_s)
     return [

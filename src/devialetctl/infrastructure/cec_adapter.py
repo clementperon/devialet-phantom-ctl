@@ -10,8 +10,16 @@ from devialetctl.domain.events import InputEvent, InputEventType
 LOG = logging.getLogger(__name__)
 
 _PATTERNS: list[tuple[re.Pattern[str], InputEventType, str]] = [
-    (re.compile(r"\bVOLUME[_\s-]?UP\b", flags=re.IGNORECASE), InputEventType.VOLUME_UP, "VOLUME_UP"),
-    (re.compile(r"\bVOLUME[_\s-]?DOWN\b", flags=re.IGNORECASE), InputEventType.VOLUME_DOWN, "VOLUME_DOWN"),
+    (
+        re.compile(r"\bVOLUME[_\s-]?UP\b", flags=re.IGNORECASE),
+        InputEventType.VOLUME_UP,
+        "VOLUME_UP",
+    ),
+    (
+        re.compile(r"\bVOLUME[_\s-]?DOWN\b", flags=re.IGNORECASE),
+        InputEventType.VOLUME_DOWN,
+        "VOLUME_DOWN",
+    ),
     (re.compile(r"\bMUTE(D)?\b", flags=re.IGNORECASE), InputEventType.MUTE, "MUTE"),
 ]
 

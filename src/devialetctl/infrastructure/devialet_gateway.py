@@ -32,7 +32,11 @@ class DevialetHttpGateway(VolumeGateway):
         return r.json()
 
     def _post(self, path: str, payload: dict[str, Any] | None = None) -> None:
-        r = requests.post(self.base_url + path, json=(payload if payload is not None else {}), timeout=self.timeout_s)
+        r = requests.post(
+            self.base_url + path,
+            json=(payload if payload is not None else {}),
+            timeout=self.timeout_s,
+        )
         r.raise_for_status()
 
     def systems(self) -> dict[str, Any]:

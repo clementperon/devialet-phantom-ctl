@@ -3,8 +3,8 @@ import logging
 import sys
 
 from devialetctl.application.daemon import DaemonRunner
-from devialetctl.application.service import VolumeService
 from devialetctl.application.ports import Target
+from devialetctl.application.service import VolumeService
 from devialetctl.infrastructure.config import load_config
 from devialetctl.infrastructure.devialet_gateway import DevialetHttpGateway, normalize_base_path
 from devialetctl.infrastructure.mdns_gateway import MdnsDiscoveryGateway
@@ -12,7 +12,9 @@ from devialetctl.infrastructure.mdns_gateway import MdnsDiscoveryGateway
 
 def _pick(services: list[Target], index: int | None):
     if not services:
-        raise RuntimeError("Aucun service detecte via mDNS (Bonjour). Verifie reseau / isolation Wi-Fi.")
+        raise RuntimeError(
+            "Aucun service detecte via mDNS (Bonjour). Verifie reseau / isolation Wi-Fi."
+        )
     if index is None:
         if len(services) == 1:
             return services[0]
@@ -43,7 +45,9 @@ def _target_from_args(args) -> Target:
         index = args.daemon_index if args.daemon_index is not None else index
 
     if ip:
-        return Target(address=ip, port=port, base_path=normalize_base_path(base_path), name="manual")
+        return Target(
+            address=ip, port=port, base_path=normalize_base_path(base_path), name="manual"
+        )
     services = MdnsDiscoveryGateway().discover(timeout_s=discover_timeout)
     return _pick(services, index)
 
@@ -55,9 +59,7 @@ def _target_from_config(args) -> Target:
             address=args.daemon_ip,
             port=args.daemon_port if args.daemon_port is not None else 80,
             base_path=normalize_base_path(
-                args.daemon_base_path
-                if args.daemon_base_path is not None
-                else "/ipcontrol/v1"
+                args.daemon_base_path if args.daemon_base_path is not None else "/ipcontrol/v1"
             ),
             name="manual",
         )
@@ -87,7 +89,9 @@ def _configure_logging(level: str) -> None:
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(prog="devialetctl", description="Devialet Phantom IP Control (discover + commands)")
+    p = argparse.ArgumentParser(
+        prog="devialetctl", description="Devialet Phantom IP Control (discover + commands)"
+    )
     p.add_argument("--discover-timeout", type=float, default=3.0)
     p.add_argument("--index", type=int, default=None)
     p.add_argument("--ip", type=str, default=None, help="IP manuelle (bypass decouverte)")
@@ -107,7 +111,9 @@ def main() -> None:
     daemon = sub.add_parser("daemon")
     daemon.add_argument("--input", choices=["cec", "keyboard"], default="cec")
     daemon.add_argument("--config", type=str, default=None)
-    daemon.add_argument("--discover-timeout", dest="daemon_discover_timeout", type=float, default=None)
+    daemon.add_argument(
+        "--discover-timeout", dest="daemon_discover_timeout", type=float, default=None
+    )
     daemon.add_argument("--index", dest="daemon_index", type=int, default=None)
     daemon.add_argument("--ip", dest="daemon_ip", type=str, default=None)
     daemon.add_argument("--port", dest="daemon_port", type=int, default=None)

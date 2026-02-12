@@ -1,8 +1,6 @@
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from devialetctl.domain.events import InputEvent
-
 
 @dataclass(frozen=True)
 class Target:
@@ -13,40 +11,18 @@ class Target:
 
 
 class VolumeGateway(Protocol):
-    def systems(self) -> dict[str, Any]:
-        ...
+    def systems(self) -> dict[str, Any]: ...
 
-    def get_volume(self) -> int:
-        ...
+    def get_volume(self) -> int: ...
 
-    def set_volume(self, volume: int) -> None:
-        ...
+    def set_volume(self, volume: int) -> None: ...
 
-    def volume_up(self) -> None:
-        ...
+    def volume_up(self) -> None: ...
 
-    def volume_down(self) -> None:
-        ...
+    def volume_down(self) -> None: ...
 
-    def mute_toggle(self) -> None:
-        ...
-
-
-class EventSource(Protocol):
-    def events(self):
-        ...
-
-
-class GatewayFactory(Protocol):
-    def __call__(self, target: Target) -> VolumeGateway:
-        ...
+    def mute_toggle(self) -> None: ...
 
 
 class DiscoveryPort(Protocol):
-    def discover(self, timeout_s: float) -> list[Target]:
-        ...
-
-
-class InputAdapter(Protocol):
-    def events(self):
-        ...
+    def discover(self, timeout_s: float) -> list[Target]: ...

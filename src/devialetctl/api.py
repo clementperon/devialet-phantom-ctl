@@ -3,6 +3,7 @@ from typing import Any, Dict
 
 from devialetctl.infrastructure.devialet_gateway import DevialetHttpGateway
 
+
 @dataclass
 class DevialetClient:
     address: str
