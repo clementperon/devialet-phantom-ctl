@@ -1,5 +1,7 @@
 import sys
 
+import pytest
+
 from devialetctl.interfaces import cli
 
 
@@ -136,3 +138,49 @@ def test_cli_daemon_accepts_subcommand_index(monkeypatch) -> None:
     )
     cli.main()
     assert FakeGateway.picked_address == "10.0.0.11"
+
+
+def test_cli_list_when_empty(monkeypatch, capsys) -> None:
+    class FakeDiscovery:
+        def discover(self, timeout_s):
+            return []
+
+    monkeypatch.setattr(cli, "MdnsDiscoveryGateway", lambda: FakeDiscovery())
+    monkeypatch.setattr(sys, "argv", ["devialetctl", "list"])
+    cli.main()
+    out = capsys.readouterr().out
+    assert "Aucun service detecte." in out
+
+
+def test_cli_daemon_handles_runtime_error(monkeypatch, capsys) -> None:
+    class FakeDiscovery:
+        def discover(self, timeout_s):
+            class Row:
+                name = "phantom"
+                address = "10.0.0.2"
+                port = 80
+                base_path = "/ipcontrol/v1"
+
+            return [Row()]
+
+    class FakeGateway:
+        def __init__(self, address, port, base_path):
+            self.address = address
+
+    class FakeRunner:
+        def __init__(self, cfg, gateway):
+            self.cfg = cfg
+            self.gateway = gateway
+
+        def run_forever(self, input_name):
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(cli, "MdnsDiscoveryGateway", lambda: FakeDiscovery())
+    monkeypatch.setattr(cli, "DevialetHttpGateway", FakeGateway)
+    monkeypatch.setattr(cli, "DaemonRunner", FakeRunner)
+    monkeypatch.setattr(sys, "argv", ["devialetctl", "daemon", "--input", "keyboard"])
+    with pytest.raises(SystemExit) as exc:
+        cli.main()
+    assert exc.value.code == 2
+    err = capsys.readouterr().err
+    assert "Erreur daemon: boom" in err
