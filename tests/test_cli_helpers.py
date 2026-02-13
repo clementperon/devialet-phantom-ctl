@@ -10,12 +10,12 @@ def _service(name="dev", address="10.0.0.2", port=80, base_path="/ipcontrol/v1")
 
 
 def test_pick_raises_on_empty_list() -> None:
-    with pytest.raises(RuntimeError, match="Aucun service"):
+    with pytest.raises(RuntimeError, match="No service"):
         cli._pick([], None)
 
 
 def test_pick_raises_on_invalid_index() -> None:
-    with pytest.raises(RuntimeError, match="Index invalide"):
+    with pytest.raises(RuntimeError, match="Invalid index"):
         cli._pick([_service()], 5)
 
 

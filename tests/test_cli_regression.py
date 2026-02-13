@@ -149,7 +149,7 @@ def test_cli_list_when_empty(monkeypatch, capsys) -> None:
     monkeypatch.setattr(sys, "argv", ["devialetctl", "list"])
     cli.main()
     out = capsys.readouterr().out
-    assert "Aucun service detecte." in out
+    assert "No service detected." in out
 
 
 def test_cli_daemon_handles_runtime_error(monkeypatch, capsys) -> None:
@@ -183,4 +183,4 @@ def test_cli_daemon_handles_runtime_error(monkeypatch, capsys) -> None:
         cli.main()
     assert exc.value.code == 2
     err = capsys.readouterr().err
-    assert "Erreur daemon: boom" in err
+    assert "Daemon error: boom" in err

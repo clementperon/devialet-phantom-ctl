@@ -13,16 +13,16 @@ from devialetctl.infrastructure.mdns_gateway import MdnsDiscoveryGateway
 def _pick(services: list[Target], index: int | None):
     if not services:
         raise RuntimeError(
-            "Aucun service detecte via mDNS (Bonjour). Verifie reseau / isolation Wi-Fi."
+            "No service detected via mDNS (Bonjour). Check network / Wi-Fi isolation."
         )
     if index is None:
         if len(services) == 1:
             return services[0]
         for i, s in enumerate(services):
             print(f"[{i}] {s.name} -> {s.address}:{s.port}{s.base_path}")
-        raise RuntimeError("Plusieurs services detectes. Relance avec --index N.")
+        raise RuntimeError("Multiple services detected. Run again with --index N.")
     if index < 0 or index >= len(services):
-        raise RuntimeError(f"Index invalide: {index}")
+        raise RuntimeError(f"Invalid index: {index}")
     return services[index]
 
 
@@ -94,7 +94,7 @@ def main() -> None:
     )
     p.add_argument("--discover-timeout", type=float, default=3.0)
     p.add_argument("--index", type=int, default=None)
-    p.add_argument("--ip", type=str, default=None, help="IP manuelle (bypass decouverte)")
+    p.add_argument("--ip", type=str, default=None, help="Manual IP (bypass discovery)")
     p.add_argument("--port", type=int, default=80)
     p.add_argument("--base-path", type=str, default="/ipcontrol/v1")
 
@@ -123,7 +123,7 @@ def main() -> None:
     if args.cmd == "list":
         services = MdnsDiscoveryGateway().discover(timeout_s=args.discover_timeout)
         if not services:
-            print("Aucun service detecte.")
+            print("No service detected.")
             return
         for i, s in enumerate(services):
             print(f"[{i}] {s.name} -> {s.address}:{s.port}{s.base_path}")
@@ -141,7 +141,7 @@ def main() -> None:
         except KeyboardInterrupt:
             return
         except Exception as exc:
-            print(f"Erreur daemon: {exc}", file=sys.stderr)
+            print(f"Daemon error: {exc}", file=sys.stderr)
             raise SystemExit(2)
 
     target = _target_from_args(args)
@@ -165,5 +165,5 @@ def main() -> None:
             client.mute()
             print("OK")
     except Exception as exc:
-        print(f"Erreur: {exc}", file=sys.stderr)
+        print(f"Error: {exc}", file=sys.stderr)
         raise SystemExit(2)
