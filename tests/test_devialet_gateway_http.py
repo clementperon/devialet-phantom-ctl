@@ -61,3 +61,25 @@ def test_gateway_endpoint_methods(monkeypatch) -> None:
     assert calls[1][0].endswith("/volumeUp")
     assert calls[2][0].endswith("/volumeDown")
     assert calls[3][0].endswith("/mute")
+
+
+def test_gateway_systems_falls_back_to_current_on_404(monkeypatch) -> None:
+    class Response:
+        status_code = 404
+
+    gw = DevialetHttpGateway(address="10.0.0.2")
+    calls = []
+
+    def fake_get(path):
+        calls.append(path)
+        if path == "/systems":
+            import requests
+
+            raise requests.HTTPError("not found", response=Response())
+        if path == "/systems/current":
+            return {"id": "current"}
+        raise AssertionError("unexpected path")
+
+    monkeypatch.setattr(gw, "_get", fake_get)
+    assert gw.systems() == {"id": "current"}
+    assert calls == ["/systems", "/systems/current"]

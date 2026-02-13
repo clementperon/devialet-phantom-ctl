@@ -40,7 +40,13 @@ class DevialetHttpGateway(VolumeGateway):
         r.raise_for_status()
 
     def systems(self) -> dict[str, Any]:
-        return self._get("/systems")
+        try:
+            return self._get("/systems")
+        except requests.HTTPError as exc:
+            response = getattr(exc, "response", None)
+            if getattr(response, "status_code", None) == 404:
+                return self._get("/systems/current")
+            raise
 
     def get_volume(self) -> int:
         data = self._get("/systems/current/sources/current/soundControl/volume")
