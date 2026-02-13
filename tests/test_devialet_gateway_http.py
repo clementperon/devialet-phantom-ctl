@@ -83,3 +83,40 @@ def test_gateway_systems_falls_back_to_current_on_404(monkeypatch) -> None:
     monkeypatch.setattr(gw, "_get", fake_get)
     assert gw.systems() == {"id": "current"}
     assert calls == ["/systems", "/systems/current"]
+
+
+def test_gateway_mute_toggle_uses_group_mute(monkeypatch) -> None:
+    gw = DevialetHttpGateway(address="10.0.0.2")
+    post_calls: list[tuple[str, object]] = []
+    get_calls = []
+
+    def fake_post(path, payload=None):
+        post_calls.append((path, payload))
+        return None
+
+    def fake_get(path):
+        get_calls.append(path)
+        if path == "/groups/current/sources/current":
+            return {"muteState": "unmuted"}
+        raise AssertionError("unexpected path")
+
+    monkeypatch.setattr(gw, "_post", fake_post)
+    monkeypatch.setattr(gw, "_get", fake_get)
+    gw.mute_toggle()
+
+    assert post_calls[0][0] == "/groups/current/sources/current/playback/mute"
+    assert get_calls == ["/groups/current/sources/current"]
+
+
+def test_gateway_mute_toggle_uses_group_unmute(monkeypatch) -> None:
+    gw = DevialetHttpGateway(address="10.0.0.2")
+    post_calls = []
+
+    def fake_post(path, payload=None):
+        post_calls.append((path, payload))
+        return None
+
+    monkeypatch.setattr(gw, "_post", fake_post)
+    monkeypatch.setattr(gw, "_get", lambda _path: {"muteState": "muted"})
+    gw.mute_toggle()
+    assert post_calls[0][0] == "/groups/current/sources/current/playback/unmute"
