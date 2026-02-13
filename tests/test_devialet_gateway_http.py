@@ -49,9 +49,14 @@ def test_gateway_endpoint_methods(monkeypatch) -> None:
     gw = DevialetHttpGateway(address="10.0.0.2")
     calls = []
     monkeypatch.setattr(gw, "_post", lambda path, payload=None: calls.append((path, payload)))
-    monkeypatch.setattr(gw, "_get", lambda _path: {"volume": 12})
+    monkeypatch.setattr(
+        gw,
+        "_get",
+        lambda path: {"volume": 12} if path.endswith("/volume") else {"muteState": "unmuted"},
+    )
 
     assert gw.get_volume() == 12
+    assert gw.get_mute_state() is False
     gw.set_volume(101)
     gw.volume_up()
     gw.volume_down()
@@ -60,7 +65,7 @@ def test_gateway_endpoint_methods(monkeypatch) -> None:
     assert calls[0] == ("/systems/current/sources/current/soundControl/volume", {"volume": 100})
     assert calls[1][0].endswith("/volumeUp")
     assert calls[2][0].endswith("/volumeDown")
-    assert calls[3][0].endswith("/mute")
+    assert calls[3][0] == "/groups/current/sources/current/playback/mute"
 
 
 def test_gateway_systems_falls_back_to_current_on_404(monkeypatch) -> None:

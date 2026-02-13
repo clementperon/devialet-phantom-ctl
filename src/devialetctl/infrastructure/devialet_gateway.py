@@ -58,6 +58,11 @@ class DevialetHttpGateway(VolumeGateway):
         v = max(0, min(100, int(volume)))
         self._post("/systems/current/sources/current/soundControl/volume", {"volume": v})
 
+    def get_mute_state(self) -> bool:
+        state = self._get("/groups/current/sources/current")
+        mute_state = str(state.get("muteState", "")).lower()
+        return mute_state == "muted"
+
     def volume_up(self) -> None:
         self._post("/systems/current/sources/current/soundControl/volumeUp")
 
@@ -66,9 +71,7 @@ class DevialetHttpGateway(VolumeGateway):
 
     def mute_toggle(self) -> None:
         # Spec-compliant mute path: group playback namespace.
-        state = self._get("/groups/current/sources/current")
-        mute_state = str(state.get("muteState", "")).lower()
-        if mute_state == "muted":
+        if self.get_mute_state():
             self._post("/groups/current/sources/current/playback/unmute")
         else:
             self._post("/groups/current/sources/current/playback/mute")

@@ -35,6 +35,13 @@ def parse_cec_line(line: str, source: str = "cec") -> InputEvent | None:
     frame_match = _HEX_CEC_FRAME_RE.search(line)
     if frame_match:
         parts = [p.upper() for p in frame_match.group(0).split(":")]
+        # CEC GIVE_AUDIO_STATUS frame: <srcdst>:71
+        if len(parts) >= 2 and parts[1] == "71":
+            return InputEvent(
+                kind=InputEventType.GIVE_AUDIO_STATUS,
+                source=source,
+                key="GIVE_AUDIO_STATUS",
+            )
         # CEC USER_CONTROL_PRESSED frame: <srcdst>:44:<keycode>
         if len(parts) >= 3 and parts[1] == "44":
             mapped = _USER_CONTROL_KEYCODE_MAP.get(parts[2])
@@ -52,17 +59,20 @@ def parse_cec_line(line: str, source: str = "cec") -> InputEvent | None:
 class CecClientAdapter:
     command: str = "cec-client -d 8 -t a -o Devialet"
     source: str = "cec"
+    _proc: subprocess.Popen | None = None
 
     def events(self) -> Iterator[InputEvent]:
         cmd = shlex.split(self.command)
         LOG.info("starting cec adapter: %s", self.command)
         proc = subprocess.Popen(
             cmd,
+            stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
         )
+        self._proc = proc
         if proc.stdout is None:
             if proc.poll() is None:
                 proc.terminate()
@@ -74,5 +84,14 @@ class CecClientAdapter:
                 if event is not None:
                     yield event
         finally:
+            self._proc = None
             if proc.poll() is None:
                 proc.terminate()
+
+    def send_tx(self, frame: str) -> bool:
+        proc = self._proc
+        if proc is None or proc.stdin is None or proc.poll() is not None:
+            return False
+        proc.stdin.write(f"tx {frame}\n")
+        proc.stdin.flush()
+        return True

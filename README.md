@@ -80,6 +80,8 @@ uv run devialetctl daemon --input cec
 The daemon:
 - consumes CEC key events from `cec-client`
 - normalizes to volume actions
+- answers `GIVE_AUDIO_STATUS` (`0x71`) with `REPORT_AUDIO_STATUS` (`0x7A`)
+- sends updated `REPORT_AUDIO_STATUS` after handled volume/mute events
 - applies dedupe/rate-limit policy
 - retries with backoff if adapter/network is temporarily unavailable
 

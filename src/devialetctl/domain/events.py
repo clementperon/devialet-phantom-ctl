@@ -6,6 +6,7 @@ class InputEventType(str, Enum):
     VOLUME_UP = "volume_up"
     VOLUME_DOWN = "volume_down"
     MUTE = "mute"
+    GIVE_AUDIO_STATUS = "give_audio_status"
 
 
 @dataclass(frozen=True)

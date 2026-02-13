@@ -37,6 +37,12 @@ def test_parse_cec_hex_traffic_user_control_pressed() -> None:
     assert mute is not None and mute.kind == InputEventType.MUTE
 
 
+def test_parse_cec_give_audio_status() -> None:
+    status = parse_cec_line("TRAFFIC: [ 3000]\t>> 05:71")
+    assert status is not None
+    assert status.kind == InputEventType.GIVE_AUDIO_STATUS
+
+
 def test_parse_cec_hex_traffic_ignores_non_pressed_frames() -> None:
     assert parse_cec_line("TRAFFIC: [ 2870]\t>> 05:45") is None
     assert parse_cec_line("TRAFFIC: [ 1331]\t<< 50:47:44:65:76:69:61:6c:65:74") is None

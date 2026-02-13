@@ -3,6 +3,7 @@ import time
 
 from devialetctl.application.router import EventRouter
 from devialetctl.application.service import VolumeService
+from devialetctl.domain.events import InputEventType
 from devialetctl.domain.policy import EventPolicy
 from devialetctl.infrastructure.cec_adapter import CecClientAdapter
 from devialetctl.infrastructure.config import DaemonConfig
@@ -49,9 +50,13 @@ class DaemonRunner:
             try:
                 adapter = CecClientAdapter(command=self.cfg.cec_command)
                 for event in adapter.events():
+                    if event.kind == InputEventType.GIVE_AUDIO_STATUS:
+                        self._report_audio_status(adapter)
+                        continue
                     handled = self.router.handle(event)
                     if handled:
                         LOG.debug("handled event=%s key=%s", event.kind.value, event.key)
+                        self._report_audio_status(adapter)
                 backoff_s = self.cfg.reconnect_delay_s
             except KeyboardInterrupt:
                 raise
@@ -59,3 +64,19 @@ class DaemonRunner:
                 LOG.exception("daemon cycle failed, retrying: %s", exc)
                 time.sleep(backoff_s)
                 backoff_s = min(max_backoff_s, backoff_s * 2.0)
+
+    def _report_audio_status(self, adapter: CecClientAdapter) -> None:
+        if not hasattr(adapter, "send_tx"):
+            return
+        try:
+            volume = max(0, min(100, int(self.gateway.get_volume())))
+            muted = bool(getattr(self.gateway, "get_mute_state", lambda: False)())
+            status = (0x80 if muted else 0x00) | (volume & 0x7F)
+            frame = f"50:7A:{status:02X}"
+            sent = adapter.send_tx(frame)
+            if sent:
+                LOG.debug("sent CEC audio status frame: %s", frame)
+            else:
+                LOG.debug("cannot send CEC audio status; adapter not writable")
+        except Exception as exc:
+            LOG.debug("failed to report CEC audio status: %s", exc)
