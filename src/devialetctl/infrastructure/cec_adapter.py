@@ -33,7 +33,7 @@ def parse_cec_line(line: str, source: str = "cec") -> InputEvent | None:
 
 @dataclass
 class CecClientAdapter:
-    command: str = "cec-client -d 8"
+    command: str = "cec-client -d 8 -t a -o Devialet"
     source: str = "cec"
 
     def events(self) -> Iterator[InputEvent]:

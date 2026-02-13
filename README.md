@@ -107,7 +107,7 @@ Example `config.toml`:
 
 ```toml
 log_level = "INFO"
-cec_command = "cec-client -d 8"
+cec_command = "cec-client -d 8 -t a -o Devialet"
 reconnect_delay_s = 2.0
 dedupe_window_s = 0.08
 min_interval_s = 0.12

@@ -25,7 +25,7 @@ class RuntimeTarget:
 @dataclass(frozen=True)
 class DaemonConfig:
     target: RuntimeTarget
-    cec_command: str = "cec-client -d 8"
+    cec_command: str = "cec-client -d 8 -t a -o Devialet"
     reconnect_delay_s: float = 2.0
     log_level: str = "INFO"
     dedupe_window_s: float = 0.08
@@ -58,7 +58,7 @@ class _TargetConfigModel(BaseModel):
 
 class _DaemonConfigModel(BaseModel):
     target: _TargetConfigModel = Field(default_factory=_TargetConfigModel)
-    cec_command: str = "cec-client -d 8"
+    cec_command: str = "cec-client -d 8 -t a -o Devialet"
     reconnect_delay_s: float = 2.0
     log_level: str = "INFO"
     dedupe_window_s: float = 0.08
