@@ -124,6 +124,7 @@ Environment overrides:
 - `DEVIALETCTL_IP`
 - `DEVIALETCTL_PORT`
 - `DEVIALETCTL_BASE_PATH`
+- `DEVIALETCTL_LOG_LEVEL`
 
 ## Service Deployment
 

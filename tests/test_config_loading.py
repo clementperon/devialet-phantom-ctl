@@ -42,3 +42,11 @@ def test_load_config_rejects_boolean_numbers(tmp_path) -> None:
     cfg_file.write_text("[target]\nport = true\n", encoding="utf-8")
     with pytest.raises(ValueError, match="target.port"):
         load_config(str(cfg_file))
+
+
+def test_load_config_env_overrides_log_level(monkeypatch, tmp_path) -> None:
+    cfg_file = tmp_path / "config.toml"
+    cfg_file.write_text('log_level = "INFO"\n', encoding="utf-8")
+    monkeypatch.setenv("DEVIALETCTL_LOG_LEVEL", "debug")
+    cfg = load_config(str(cfg_file))
+    assert cfg.log_level == "DEBUG"

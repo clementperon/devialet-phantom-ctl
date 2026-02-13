@@ -111,12 +111,15 @@ def _merge_env_overrides(data: dict[str, Any]) -> dict[str, Any]:
     env_ip = os.getenv("DEVIALETCTL_IP")
     env_port = os.getenv("DEVIALETCTL_PORT")
     env_base = os.getenv("DEVIALETCTL_BASE_PATH")
+    env_log_level = os.getenv("DEVIALETCTL_LOG_LEVEL")
     if env_ip is not None:
         target_data["ip"] = env_ip
     if env_port is not None:
         target_data["port"] = env_port
     if env_base is not None:
         target_data["base_path"] = env_base
+    if env_log_level is not None:
+        merged["log_level"] = env_log_level
 
     merged["target"] = target_data
     return merged
