@@ -28,14 +28,15 @@ def test_daemon_runner_routes_events(monkeypatch) -> None:
     from devialetctl.domain.events import InputEvent, InputEventType
 
     class OneShotAdapter:
-        def __init__(self, command):
-            self.command = command
+        def __init__(self, device_name, adapter_path=None):
+            self.device_name = device_name
+            self.adapter_path = adapter_path
 
         def events(self):
             yield InputEvent(kind=InputEventType.VOLUME_UP, source="cec", key="VOLUME_UP")
             raise KeyboardInterrupt()
 
-    monkeypatch.setattr("devialetctl.application.daemon.CecClientAdapter", OneShotAdapter)
+    monkeypatch.setattr("devialetctl.application.daemon.LibCecAdapter", OneShotAdapter)
     cfg = DaemonConfig(target=RuntimeTarget(ip="10.0.0.2"), min_interval_s=0.0, dedupe_window_s=0.0)
     gw = FakeGateway()
     runner = DaemonRunner(cfg=cfg, gateway=gw)
@@ -111,8 +112,9 @@ def test_daemon_runner_reports_cec_audio_status(monkeypatch) -> None:
     sent_frames: list[str] = []
 
     class OneShotAdapter:
-        def __init__(self, command):
-            self.command = command
+        def __init__(self, device_name, adapter_path=None):
+            self.device_name = device_name
+            self.adapter_path = adapter_path
 
         def events(self):
             yield InputEvent(
@@ -126,7 +128,7 @@ def test_daemon_runner_reports_cec_audio_status(monkeypatch) -> None:
             sent_frames.append(frame)
             return True
 
-    monkeypatch.setattr("devialetctl.application.daemon.CecClientAdapter", OneShotAdapter)
+    monkeypatch.setattr("devialetctl.application.daemon.LibCecAdapter", OneShotAdapter)
     cfg = DaemonConfig(target=RuntimeTarget(ip="10.0.0.2"), min_interval_s=0.0, dedupe_window_s=0.0)
     runner = DaemonRunner(cfg=cfg, gateway=FakeGateway())
     try:
@@ -166,8 +168,9 @@ def test_daemon_runner_replies_system_audio_and_arc_requests(monkeypatch) -> Non
     sent_frames: list[str] = []
 
     class OneShotAdapter:
-        def __init__(self, command):
-            self.command = command
+        def __init__(self, device_name, adapter_path=None):
+            self.device_name = device_name
+            self.adapter_path = adapter_path
 
         def events(self):
             yield InputEvent(
@@ -196,7 +199,7 @@ def test_daemon_runner_replies_system_audio_and_arc_requests(monkeypatch) -> Non
             sent_frames.append(frame)
             return True
 
-    monkeypatch.setattr("devialetctl.application.daemon.CecClientAdapter", OneShotAdapter)
+    monkeypatch.setattr("devialetctl.application.daemon.LibCecAdapter", OneShotAdapter)
     cfg = DaemonConfig(target=RuntimeTarget(ip="10.0.0.2"), min_interval_s=0.0, dedupe_window_s=0.0)
     runner = DaemonRunner(cfg=cfg, gateway=FakeGateway())
     try:
@@ -240,8 +243,9 @@ def test_daemon_runner_handles_set_audio_volume_level(monkeypatch) -> None:
     sent_frames: list[str] = []
 
     class OneShotAdapter:
-        def __init__(self, command):
-            self.command = command
+        def __init__(self, device_name, adapter_path=None):
+            self.device_name = device_name
+            self.adapter_path = adapter_path
 
         def events(self):
             yield InputEvent(
@@ -257,7 +261,7 @@ def test_daemon_runner_handles_set_audio_volume_level(monkeypatch) -> None:
             sent_frames.append(frame)
             return True
 
-    monkeypatch.setattr("devialetctl.application.daemon.CecClientAdapter", OneShotAdapter)
+    monkeypatch.setattr("devialetctl.application.daemon.LibCecAdapter", OneShotAdapter)
     cfg = DaemonConfig(target=RuntimeTarget(ip="10.0.0.2"), min_interval_s=0.0, dedupe_window_s=0.0)
     gw = FakeGateway()
     runner = DaemonRunner(cfg=cfg, gateway=gw)

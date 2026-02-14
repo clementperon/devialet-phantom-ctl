@@ -117,7 +117,7 @@ Config source priority:
 
 Relevant settings:
 - target: `ip`, `port`, `base_path`, `discover_timeout`, `index`
-- daemon: `cec_command`, `reconnect_delay_s`, `log_level`
+- daemon: `cec_device_name`, `cec_adapter_path`, `reconnect_delay_s`, `log_level`
 - policy: `dedupe_window_s`, `min_interval_s`
 
 ## Compatibility Guarantees

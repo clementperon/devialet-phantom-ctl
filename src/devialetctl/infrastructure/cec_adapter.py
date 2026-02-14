@@ -1,9 +1,9 @@
+import importlib
 import logging
+import queue
 import re
-import shlex
-import subprocess
 from dataclasses import dataclass
-from typing import Iterator
+from typing import Any, Iterator
 
 from devialetctl.domain.events import InputEvent, InputEventType
 
@@ -34,6 +34,11 @@ _SYSTEM_REQUEST_OPCODE_MAP: dict[str, tuple[InputEventType, str]] = {
     "7D": (InputEventType.GIVE_SYSTEM_AUDIO_MODE_STATUS, "GIVE_SYSTEM_AUDIO_MODE_STATUS"),
     "C3": (InputEventType.REQUEST_ARC_INITIATION, "REQUEST_ARC_INITIATION"),
     "C4": (InputEventType.REQUEST_ARC_TERMINATION, "REQUEST_ARC_TERMINATION"),
+}
+_KEYPRESS_CODE_MAP: dict[int, tuple[InputEventType, str]] = {
+    0x41: (InputEventType.VOLUME_UP, "VOLUME_UP"),
+    0x42: (InputEventType.VOLUME_DOWN, "VOLUME_DOWN"),
+    0x43: (InputEventType.MUTE, "MUTE"),
 }
 
 
@@ -78,44 +83,105 @@ def parse_cec_line(line: str, source: str = "cec") -> InputEvent | None:
 
 
 @dataclass
-class CecClientAdapter:
-    command: str = "cec-client -d 8 -t a -o Devialet"
+class LibCecAdapter:
+    device_name: str = "Devialet"
+    adapter_path: str | None = None
     source: str = "cec"
-    _proc: subprocess.Popen | None = None
+    _cec: Any = None
+    _lib: Any = None
+    _connected: bool = False
+    _events_queue: queue.Queue = queue.Queue()
+
+    def __post_init__(self) -> None:
+        self._events_queue = queue.Queue()
+        try:
+            cec_module = importlib.import_module("cec")
+        except ModuleNotFoundError as exc:  # pragma: no cover
+            raise RuntimeError(
+                "python libCEC bindings are not installed. Install libcec + python bindings."
+            ) from exc
+        self._cec = cec_module
+
+    def _on_log(self, level, timestamp, message) -> int:
+        text = str(message).rstrip()
+        if text:
+            LOG.debug("CEC LIB [%s] %s", timestamp, text)
+        return 0
+
+    def _on_keypress(self, key, _duration) -> int:
+        try:
+            code = int(key)
+        except (TypeError, ValueError):
+            return 0
+        mapped = _KEYPRESS_CODE_MAP.get(code)
+        if mapped is None:
+            return 0
+        kind, key_name = mapped
+        self._events_queue.put(InputEvent(kind=kind, source=self.source, key=key_name))
+        return 0
+
+    def _on_command(self, cmd) -> int:
+        line = str(cmd)
+        LOG.debug("CEC RX: %s", line.rstrip())
+        event = parse_cec_line(line, source=self.source)
+        if event is not None:
+            self._events_queue.put(event)
+        return 0
+
+    def _open(self) -> None:
+        cec = self._cec
+        cfg = cec.libcec_configuration()
+        cfg.strDeviceName = self.device_name
+        cfg.bActivateSource = 0
+        cfg.deviceTypes.Add(cec.CEC_DEVICE_TYPE_AUDIO_SYSTEM)
+        cfg.clientVersion = cec.LIBCEC_VERSION_CURRENT
+        cfg.SetLogCallback(self._on_log)
+        cfg.SetKeyPressCallback(self._on_keypress)
+        cfg.SetCommandCallback(self._on_command)
+        self._lib = cec.ICECAdapter.Create(cfg)
+        adapters = self._lib.DetectAdapters()
+        if not adapters:
+            raise RuntimeError("No CEC adapter detected")
+        selected = None
+        if self.adapter_path:
+            for adapter in adapters:
+                if getattr(adapter, "strComName", "") == self.adapter_path:
+                    selected = adapter
+                    break
+            if selected is None:
+                raise RuntimeError(f"CEC adapter not found: {self.adapter_path}")
+        else:
+            selected = adapters[0]
+        port = getattr(selected, "strComName", "")
+        LOG.info("opening libCEC adapter: %s", port)
+        if not self._lib.Open(port):
+            raise RuntimeError(f"Failed to open CEC adapter: {port}")
+        self._connected = True
 
     def events(self) -> Iterator[InputEvent]:
-        cmd = shlex.split(self.command)
-        LOG.info("starting cec adapter: %s", self.command)
-        proc = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-        )
-        self._proc = proc
-        if proc.stdout is None:
-            if proc.poll() is None:
-                proc.terminate()
-            raise RuntimeError("cec-client did not expose a readable stdout pipe")
-
+        self._open()
         try:
-            for line in proc.stdout:
-                LOG.debug("CEC RX: %s", line.rstrip())
-                event = parse_cec_line(line, source=self.source)
-                if event is not None:
-                    yield event
+            while self._connected:
+                try:
+                    event = self._events_queue.get(timeout=0.2)
+                except queue.Empty:
+                    continue
+                yield event
         finally:
-            self._proc = None
-            if proc.poll() is None:
-                proc.terminate()
+            self._connected = False
+            if self._lib is not None:
+                try:
+                    self._lib.Close()
+                except Exception:  # pragma: no cover
+                    LOG.debug("failed to close libCEC adapter cleanly")
 
     def send_tx(self, frame: str) -> bool:
-        proc = self._proc
-        if proc is None or proc.stdin is None or proc.poll() is not None:
+        if self._lib is None or not self._connected:
             return False
         LOG.debug("CEC TX: tx %s", frame)
-        proc.stdin.write(f"tx {frame}\n")
-        proc.stdin.flush()
-        return True
+        command = self._lib.CommandFromString(frame.lower())
+        return bool(self._lib.Transmit(command))
+
+
+# Backward-compatible alias with previous adapter name.
+CecClientAdapter = LibCecAdapter

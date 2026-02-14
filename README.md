@@ -28,7 +28,8 @@ Use cases:
 - Devialet DOS with IP control enabled
 
 For HDMI-CEC daemon mode:
-- `cec-client` available on host
+- libCEC runtime installed on host
+- Python libCEC bindings importable as `cec`
 - CEC-capable adapter/device path (commonly Raspberry Pi HDMI or USB-CEC adapter)
 
 ## Install
@@ -78,7 +79,7 @@ uv run devialetctl daemon --input cec
 ```
 
 The daemon:
-- consumes CEC key events from `cec-client`
+- consumes CEC key/events from libCEC callbacks
 - normalizes to volume actions
 - answers `GIVE_AUDIO_STATUS` (`0x71`) with `REPORT_AUDIO_STATUS` (`0x7A`)
 - answers System Audio/ARC requests (`0x70`, `0x7D`, `0xC3`, `0xC4`)
@@ -111,7 +112,8 @@ Example `config.toml`:
 
 ```toml
 log_level = "INFO"
-cec_command = "cec-client -d 8 -t a -o Devialet"
+cec_device_name = "Devialet"
+cec_adapter_path = "/dev/ttyACM0" # optional, auto-detect when omitted
 reconnect_delay_s = 2.0
 dedupe_window_s = 0.08
 min_interval_s = 0.12
@@ -124,8 +126,8 @@ discover_timeout = 3.0
 index = 0
 ```
 
-Use `log_level = "DEBUG"` (or `DEVIALETCTL_LOG_LEVEL=DEBUG`) to log raw HDMI-CEC frames:
-- `CEC RX: ...` for received lines from `cec-client`
+Use `log_level = "DEBUG"` (or `DEVIALETCTL_LOG_LEVEL=DEBUG`) to log HDMI-CEC activity:
+- `CEC RX: ...` for received command callbacks
 - `CEC TX: tx ...` for transmitted frames
 
 Environment overrides:
@@ -133,6 +135,8 @@ Environment overrides:
 - `DEVIALETCTL_PORT`
 - `DEVIALETCTL_BASE_PATH`
 - `DEVIALETCTL_LOG_LEVEL`
+- `DEVIALETCTL_CEC_DEVICE_NAME`
+- `DEVIALETCTL_CEC_ADAPTER_PATH`
 
 ## Service Deployment
 
