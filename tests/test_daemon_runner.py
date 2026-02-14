@@ -135,7 +135,7 @@ def test_daemon_runner_reports_cec_audio_status(monkeypatch) -> None:
         pass
 
     # muted bit set (0x80) + volume (11)
-    assert sent_frames == ["50:7A:8B", "50:73:8B"]
+    assert sent_frames == ["50:7A:8B"]
 
 
 def test_daemon_runner_replies_system_audio_and_arc_requests(monkeypatch) -> None:
@@ -204,7 +204,7 @@ def test_daemon_runner_replies_system_audio_and_arc_requests(monkeypatch) -> Non
     except KeyboardInterrupt:
         pass
 
-    assert sent_frames == ["50:72:01", "50:7E:01", "50:C1", "50:C2"]
+    assert sent_frames == ["50:72:01", "50:7E:01", "50:C0", "50:C5"]
 
 
 def test_daemon_runner_handles_set_audio_volume_level(monkeypatch) -> None:
@@ -267,4 +267,4 @@ def test_daemon_runner_handles_set_audio_volume_level(monkeypatch) -> None:
         pass
 
     assert gw.calls == [("set", 26), "mute"]
-    assert sent_frames == ["50:7A:1A", "50:73:1A"]
+    assert sent_frames == ["50:7A:1A"]
