@@ -43,6 +43,22 @@ def test_parse_cec_give_audio_status() -> None:
     assert status.kind == InputEventType.GIVE_AUDIO_STATUS
 
 
+def test_parse_cec_system_audio_and_arc_requests() -> None:
+    sys_mode_req = parse_cec_line("TRAFFIC: [ 3001]\t>> 05:70")
+    sys_mode_status = parse_cec_line("TRAFFIC: [ 3002]\t>> 05:7d")
+    arc_init = parse_cec_line("TRAFFIC: [ 3003]\t>> 05:c3")
+    arc_term = parse_cec_line("TRAFFIC: [ 3004]\t>> 05:c4")
+    assert (
+        sys_mode_req is not None and sys_mode_req.kind == InputEventType.SYSTEM_AUDIO_MODE_REQUEST
+    )
+    assert (
+        sys_mode_status is not None
+        and sys_mode_status.kind == InputEventType.GIVE_SYSTEM_AUDIO_MODE_STATUS
+    )
+    assert arc_init is not None and arc_init.kind == InputEventType.REQUEST_ARC_INITIATION
+    assert arc_term is not None and arc_term.kind == InputEventType.REQUEST_ARC_TERMINATION
+
+
 def test_parse_cec_hex_traffic_ignores_non_pressed_frames() -> None:
     assert parse_cec_line("TRAFFIC: [ 2870]\t>> 05:45") is None
     assert parse_cec_line("TRAFFIC: [ 1331]\t<< 50:47:44:65:76:69:61:6c:65:74") is None

@@ -29,6 +29,12 @@ _USER_CONTROL_KEYCODE_MAP: dict[str, tuple[InputEventType, str]] = {
     "42": (InputEventType.VOLUME_DOWN, "VOLUME_DOWN"),
     "43": (InputEventType.MUTE, "MUTE"),
 }
+_SYSTEM_REQUEST_OPCODE_MAP: dict[str, tuple[InputEventType, str]] = {
+    "70": (InputEventType.SYSTEM_AUDIO_MODE_REQUEST, "SYSTEM_AUDIO_MODE_REQUEST"),
+    "7D": (InputEventType.GIVE_SYSTEM_AUDIO_MODE_STATUS, "GIVE_SYSTEM_AUDIO_MODE_STATUS"),
+    "C3": (InputEventType.REQUEST_ARC_INITIATION, "REQUEST_ARC_INITIATION"),
+    "C4": (InputEventType.REQUEST_ARC_TERMINATION, "REQUEST_ARC_TERMINATION"),
+}
 
 
 def parse_cec_line(line: str, source: str = "cec") -> InputEvent | None:
@@ -45,6 +51,12 @@ def parse_cec_line(line: str, source: str = "cec") -> InputEvent | None:
         # CEC USER_CONTROL_PRESSED frame: <srcdst>:44:<keycode>
         if len(parts) >= 3 and parts[1] == "44":
             mapped = _USER_CONTROL_KEYCODE_MAP.get(parts[2])
+            if mapped is not None:
+                event, key = mapped
+                return InputEvent(kind=event, source=source, key=key)
+        # CEC system-audio / ARC requests.
+        if len(parts) >= 2:
+            mapped = _SYSTEM_REQUEST_OPCODE_MAP.get(parts[1])
             if mapped is not None:
                 event, key = mapped
                 return InputEvent(kind=event, source=source, key=key)

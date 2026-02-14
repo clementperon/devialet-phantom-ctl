@@ -11,6 +11,12 @@ from devialetctl.infrastructure.devialet_gateway import DevialetHttpGateway
 from devialetctl.infrastructure.keyboard_adapter import KeyboardAdapter
 
 LOG = logging.getLogger(__name__)
+_CEC_SYSTEM_RESPONSE_MAP: dict[InputEventType, str] = {
+    InputEventType.SYSTEM_AUDIO_MODE_REQUEST: "50:72:01",
+    InputEventType.GIVE_SYSTEM_AUDIO_MODE_STATUS: "50:7E:01",
+    InputEventType.REQUEST_ARC_INITIATION: "50:C1",
+    InputEventType.REQUEST_ARC_TERMINATION: "50:C2",
+}
 
 
 class DaemonRunner:
@@ -50,6 +56,8 @@ class DaemonRunner:
             try:
                 adapter = CecClientAdapter(command=self.cfg.cec_command)
                 for event in adapter.events():
+                    if self._handle_cec_system_request(adapter, event.kind):
+                        continue
                     if event.kind == InputEventType.GIVE_AUDIO_STATUS:
                         self._report_audio_status(adapter)
                         continue
@@ -64,6 +72,19 @@ class DaemonRunner:
                 LOG.exception("daemon cycle failed, retrying: %s", exc)
                 time.sleep(backoff_s)
                 backoff_s = min(max_backoff_s, backoff_s * 2.0)
+
+    def _handle_cec_system_request(self, adapter: CecClientAdapter, kind: InputEventType) -> bool:
+        frame = _CEC_SYSTEM_RESPONSE_MAP.get(kind)
+        if frame is None:
+            return False
+        if not hasattr(adapter, "send_tx"):
+            return True
+        sent = adapter.send_tx(frame)
+        if sent:
+            LOG.debug("sent CEC system/ARC response frame: %s", frame)
+        else:
+            LOG.debug("cannot send CEC system/ARC response frame: %s", frame)
+        return True
 
     def _report_audio_status(self, adapter: CecClientAdapter) -> None:
         if not hasattr(adapter, "send_tx"):
