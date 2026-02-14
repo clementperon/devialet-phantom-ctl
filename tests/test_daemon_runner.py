@@ -205,3 +205,66 @@ def test_daemon_runner_replies_system_audio_and_arc_requests(monkeypatch) -> Non
         pass
 
     assert sent_frames == ["50:72:01", "50:7E:01", "50:C1", "50:C2"]
+
+
+def test_daemon_runner_handles_set_audio_volume_level(monkeypatch) -> None:
+    class FakeGateway:
+        def __init__(self):
+            self.calls = []
+            self.muted = True
+
+        def systems(self):
+            return {}
+
+        def get_volume(self):
+            return 26
+
+        def get_mute_state(self):
+            return self.muted
+
+        def set_volume(self, volume):
+            self.calls.append(("set", volume))
+
+        def volume_up(self):
+            return None
+
+        def volume_down(self):
+            return None
+
+        def mute_toggle(self):
+            self.calls.append("mute")
+            self.muted = not self.muted
+
+    from devialetctl.domain.events import InputEvent, InputEventType
+
+    sent_frames: list[str] = []
+
+    class OneShotAdapter:
+        def __init__(self, command):
+            self.command = command
+
+        def events(self):
+            yield InputEvent(
+                kind=InputEventType.SET_AUDIO_VOLUME_LEVEL,
+                source="cec",
+                key="SET_AUDIO_VOLUME_LEVEL",
+                value=26,
+                muted=False,
+            )
+            raise KeyboardInterrupt()
+
+        def send_tx(self, frame: str) -> bool:
+            sent_frames.append(frame)
+            return True
+
+    monkeypatch.setattr("devialetctl.application.daemon.CecClientAdapter", OneShotAdapter)
+    cfg = DaemonConfig(target=RuntimeTarget(ip="10.0.0.2"), min_interval_s=0.0, dedupe_window_s=0.0)
+    gw = FakeGateway()
+    runner = DaemonRunner(cfg=cfg, gateway=gw)
+    try:
+        runner.run_cec_forever()
+    except KeyboardInterrupt:
+        pass
+
+    assert gw.calls == [("set", 26), "mute"]
+    assert sent_frames == ["50:7A:1A"]

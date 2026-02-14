@@ -3,7 +3,7 @@ import time
 
 from devialetctl.application.router import EventRouter
 from devialetctl.application.service import VolumeService
-from devialetctl.domain.events import InputEventType
+from devialetctl.domain.events import InputEvent, InputEventType
 from devialetctl.domain.policy import EventPolicy
 from devialetctl.infrastructure.cec_adapter import CecClientAdapter
 from devialetctl.infrastructure.config import DaemonConfig
@@ -58,6 +58,9 @@ class DaemonRunner:
                 for event in adapter.events():
                     if self._handle_cec_system_request(adapter, event.kind):
                         continue
+                    if event.kind == InputEventType.SET_AUDIO_VOLUME_LEVEL:
+                        self._handle_set_audio_volume_level(adapter, event)
+                        continue
                     if event.kind == InputEventType.GIVE_AUDIO_STATUS:
                         self._report_audio_status(adapter)
                         continue
@@ -101,3 +104,24 @@ class DaemonRunner:
                 LOG.debug("cannot send CEC audio status; adapter not writable")
         except Exception as exc:
             LOG.debug("failed to report CEC audio status: %s", exc)
+
+    def _handle_set_audio_volume_level(self, adapter: CecClientAdapter, event: InputEvent) -> None:
+        try:
+            target_volume = event.value
+            if target_volume is None:
+                return
+            self.gateway.set_volume(max(0, min(100, int(target_volume))))
+
+            if event.muted is not None and hasattr(self.gateway, "get_mute_state"):
+                current_muted = bool(self.gateway.get_mute_state())
+                if bool(event.muted) != current_muted:
+                    self.gateway.mute_toggle()
+
+            LOG.debug(
+                "handled CEC set_audio_volume_level volume=%s muted=%s",
+                event.value,
+                event.muted,
+            )
+            self._report_audio_status(adapter)
+        except Exception as exc:
+            LOG.debug("failed to handle CEC set_audio_volume_level: %s", exc)

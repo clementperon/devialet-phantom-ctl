@@ -11,6 +11,7 @@ class InputEventType(str, Enum):
     GIVE_SYSTEM_AUDIO_MODE_STATUS = "give_system_audio_mode_status"
     REQUEST_ARC_INITIATION = "request_arc_initiation"
     REQUEST_ARC_TERMINATION = "request_arc_termination"
+    SET_AUDIO_VOLUME_LEVEL = "set_audio_volume_level"
 
 
 @dataclass(frozen=True)
@@ -18,3 +19,5 @@ class InputEvent:
     kind: InputEventType
     source: str
     key: str
+    value: int | None = None
+    muted: bool | None = None

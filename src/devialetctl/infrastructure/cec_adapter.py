@@ -54,6 +54,16 @@ def parse_cec_line(line: str, source: str = "cec") -> InputEvent | None:
             if mapped is not None:
                 event, key = mapped
                 return InputEvent(kind=event, source=source, key=key)
+        # CEC SET_AUDIO_VOLUME_LEVEL frame: <srcdst>:73:<status-byte>
+        if len(parts) >= 3 and parts[1] == "73":
+            status = int(parts[2], 16)
+            return InputEvent(
+                kind=InputEventType.SET_AUDIO_VOLUME_LEVEL,
+                source=source,
+                key="SET_AUDIO_VOLUME_LEVEL",
+                value=status & 0x7F,
+                muted=bool(status & 0x80),
+            )
         # CEC system-audio / ARC requests.
         if len(parts) >= 2:
             mapped = _SYSTEM_REQUEST_OPCODE_MAP.get(parts[1])

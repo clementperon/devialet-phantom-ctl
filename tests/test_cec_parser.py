@@ -59,6 +59,14 @@ def test_parse_cec_system_audio_and_arc_requests() -> None:
     assert arc_term is not None and arc_term.kind == InputEventType.REQUEST_ARC_TERMINATION
 
 
+def test_parse_cec_set_audio_volume_level() -> None:
+    event = parse_cec_line("TRAFFIC: [ 3005]\t>> 05:73:9A")
+    assert event is not None
+    assert event.kind == InputEventType.SET_AUDIO_VOLUME_LEVEL
+    assert event.value == 0x1A
+    assert event.muted is True
+
+
 def test_parse_cec_hex_traffic_ignores_non_pressed_frames() -> None:
     assert parse_cec_line("TRAFFIC: [ 2870]\t>> 05:45") is None
     assert parse_cec_line("TRAFFIC: [ 1331]\t<< 50:47:44:65:76:69:61:6c:65:74") is None
