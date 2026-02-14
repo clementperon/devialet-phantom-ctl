@@ -48,6 +48,7 @@ def test_parse_cec_system_audio_and_arc_requests() -> None:
     sys_mode_status = parse_cec_line("TRAFFIC: [ 3002]\t>> 05:7d")
     arc_init = parse_cec_line("TRAFFIC: [ 3003]\t>> 05:c3")
     arc_term = parse_cec_line("TRAFFIC: [ 3004]\t>> 05:c4")
+    sad_req = parse_cec_line("TRAFFIC: [ 3006]\t>> 05:a4:02:0a")
     assert (
         sys_mode_req is not None and sys_mode_req.kind == InputEventType.SYSTEM_AUDIO_MODE_REQUEST
     )
@@ -57,6 +58,7 @@ def test_parse_cec_system_audio_and_arc_requests() -> None:
     )
     assert arc_init is not None and arc_init.kind == InputEventType.REQUEST_ARC_INITIATION
     assert arc_term is not None and arc_term.kind == InputEventType.REQUEST_ARC_TERMINATION
+    assert sad_req is not None and sad_req.kind == InputEventType.REQUEST_SHORT_AUDIO_DESCRIPTOR
 
 
 def test_parse_cec_set_audio_volume_level() -> None:

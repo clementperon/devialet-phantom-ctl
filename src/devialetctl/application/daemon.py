@@ -16,6 +16,9 @@ _CEC_SYSTEM_RESPONSE_MAP: dict[InputEventType, str] = {
     InputEventType.GIVE_SYSTEM_AUDIO_MODE_STATUS: "50:7E:01",
     InputEventType.REQUEST_ARC_INITIATION: "50:C0",
     InputEventType.REQUEST_ARC_TERMINATION: "50:C5",
+    # REPORT_SHORT_AUDIO_DESCRIPTOR with one valid LPCM SAD:
+    # format=LPCM (1), channels=2, rates=32/44.1/48kHz, sizes=16/20/24bit
+    InputEventType.REQUEST_SHORT_AUDIO_DESCRIPTOR: "50:A3:09:07:07",
 }
 
 

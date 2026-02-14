@@ -11,6 +11,7 @@ class InputEventType(str, Enum):
     GIVE_SYSTEM_AUDIO_MODE_STATUS = "give_system_audio_mode_status"
     REQUEST_ARC_INITIATION = "request_arc_initiation"
     REQUEST_ARC_TERMINATION = "request_arc_termination"
+    REQUEST_SHORT_AUDIO_DESCRIPTOR = "request_short_audio_descriptor"
     SET_AUDIO_VOLUME_LEVEL = "set_audio_volume_level"
 
 

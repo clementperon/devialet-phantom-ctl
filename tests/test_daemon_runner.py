@@ -190,6 +190,11 @@ def test_daemon_runner_replies_system_audio_and_arc_requests(monkeypatch) -> Non
                 source="cec",
                 key="REQUEST_ARC_TERMINATION",
             )
+            yield InputEvent(
+                kind=InputEventType.REQUEST_SHORT_AUDIO_DESCRIPTOR,
+                source="cec",
+                key="REQUEST_SHORT_AUDIO_DESCRIPTOR",
+            )
             raise KeyboardInterrupt()
 
         def send_tx(self, frame: str) -> bool:
@@ -204,7 +209,7 @@ def test_daemon_runner_replies_system_audio_and_arc_requests(monkeypatch) -> Non
     except KeyboardInterrupt:
         pass
 
-    assert sent_frames == ["50:72:01", "50:7E:01", "50:C0", "50:C5"]
+    assert sent_frames == ["50:72:01", "50:7E:01", "50:C0", "50:C5", "50:A3:09:07:07"]
 
 
 def test_daemon_runner_handles_set_audio_volume_level(monkeypatch) -> None:
