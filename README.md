@@ -122,6 +122,10 @@ discover_timeout = 3.0
 index = 0
 ```
 
+Use `log_level = "DEBUG"` (or `DEVIALETCTL_LOG_LEVEL=DEBUG`) to log raw HDMI-CEC frames:
+- `CEC RX: ...` for received lines from `cec-client`
+- `CEC TX: tx ...` for transmitted frames
+
 Environment overrides:
 - `DEVIALETCTL_IP`
 - `DEVIALETCTL_PORT`

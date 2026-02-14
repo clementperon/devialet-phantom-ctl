@@ -80,6 +80,7 @@ class CecClientAdapter:
 
         try:
             for line in proc.stdout:
+                LOG.debug("CEC RX: %s", line.rstrip())
                 event = parse_cec_line(line, source=self.source)
                 if event is not None:
                     yield event
@@ -92,6 +93,7 @@ class CecClientAdapter:
         proc = self._proc
         if proc is None or proc.stdin is None or proc.poll() is not None:
             return False
+        LOG.debug("CEC TX: tx %s", frame)
         proc.stdin.write(f"tx {frame}\n")
         proc.stdin.flush()
         return True
