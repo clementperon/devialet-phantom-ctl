@@ -2,15 +2,12 @@ import logging
 import re
 import shlex
 import subprocess
-import time
 from dataclasses import dataclass
 from typing import Iterator
 
 from devialetctl.domain.events import InputEvent, InputEventType
 
 LOG = logging.getLogger(__name__)
-_DISCOVERY_VENDOR_FRAME = "5F:87:00:00:F0"
-_DISCOVERY_DELAY_S = 0.08
 _LOGICAL_ADDRESS_NAMES: dict[int, str] = {
     0x0: "TV",
     0x1: "Recorder 1",
@@ -168,18 +165,6 @@ class CecClientAdapter:
     source: str = "cec"
     _proc: subprocess.Popen | None = None
 
-    def _announce_vendor_id(self) -> None:
-        sent = self.send_tx(_DISCOVERY_VENDOR_FRAME)
-        if sent:
-            LOG.debug(
-                "sent CEC discovery frame: %s (%s)",
-                _DISCOVERY_VENDOR_FRAME,
-                format_cec_frame_human(_DISCOVERY_VENDOR_FRAME),
-            )
-        else:
-            LOG.debug("cannot send CEC discovery frame: %s", _DISCOVERY_VENDOR_FRAME)
-        time.sleep(_DISCOVERY_DELAY_S)
-
     def events(self) -> Iterator[InputEvent]:
         cmd = shlex.split(self.command)
         LOG.info("starting cec adapter: %s", self.command)
@@ -198,17 +183,12 @@ class CecClientAdapter:
             raise RuntimeError("cec-client did not expose a readable stdout pipe")
 
         try:
-            announced_vendor_id = False
             for line in proc.stdout:
                 LOG.debug("CEC RX: %s", line.rstrip())
                 frame_match = _HEX_CEC_FRAME_RE.search(line)
                 if frame_match:
                     frame = frame_match.group(0).upper()
                     LOG.debug("CEC RX decoded: %s -> %s", frame, format_cec_frame_human(frame))
-                if not announced_vendor_id and "waiting for input" in line.lower():
-                    # Send a stable vendor broadcast once the CEC link is ready.
-                    self._announce_vendor_id()
-                    announced_vendor_id = True
                 event = parse_cec_line(line, source=self.source)
                 if event is not None:
                     yield event
