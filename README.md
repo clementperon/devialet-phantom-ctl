@@ -82,8 +82,9 @@ The daemon:
 - normalizes to volume actions
 - answers `GIVE_AUDIO_STATUS` (`0x71`) with `REPORT_AUDIO_STATUS` (`0x7A`)
 - answers System Audio/ARC requests (`0x70`, `0x7D`, `0xC3`, `0xC4`)
+- answers `REQUEST_SHORT_AUDIO_DESCRIPTOR` (`0xA4`) with `REPORT_SHORT_AUDIO_DESCRIPTOR` (`0xA3`)
 - applies absolute volume from TV `SET_AUDIO_VOLUME_LEVEL` (`0x73`)
-- sends updated `REPORT_AUDIO_STATUS` after handled volume/mute events
+- sends updated `REPORT_AUDIO_STATUS` (`0x7A`) after handled volume/mute events
 - applies dedupe/rate-limit policy
 - retries with backoff if adapter/network is temporarily unavailable
 
