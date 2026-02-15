@@ -326,7 +326,7 @@ def test_daemon_runner_reports_status_on_user_control_released(monkeypatch) -> N
     except KeyboardInterrupt:
         pass
 
-    assert sent_frames == ["50:7A:1D"]
+    assert sent_frames == []
 
 
 def test_daemon_runner_reuses_cached_audio_state_for_release_report(monkeypatch) -> None:
@@ -389,8 +389,7 @@ def test_daemon_runner_reuses_cached_audio_state_for_release_report(monkeypatch)
     except KeyboardInterrupt:
         pass
 
-    assert sent_frames == ["50:7A:0B", "50:7A:0B"]
-    # 1 GET from relative step (volume_up) + 1 GET for first report.
-    # The second report on key release must reuse cache (no extra GET).
+    assert sent_frames == ["50:7A:0B"]
+    # 1 GET from relative step (volume_up) + 1 GET for report after handled event.
     assert gw.get_volume_calls == 2
     assert gw.get_mute_calls == 1

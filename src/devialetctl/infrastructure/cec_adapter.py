@@ -86,6 +86,10 @@ _SYSTEM_REQUEST_OPCODE_MAP: dict[str, tuple[InputEventType, str]] = {
 
 def parse_cec_line(line: str, source: str = "cec") -> InputEvent | None:
     upper_line = line.upper()
+    # libCEC emits human-readable "key released: volume ..." lines in addition to
+    # TRAFFIC frames. Treating those as volume events duplicates one key press.
+    if "KEY RELEASED" in upper_line:
+        return None
     # libCEC traffic lines with "<<" are transmit echoes / adapter chatter.
     # Only parse inbound CEC traffic (" >> ") to avoid feedback loops.
     if "TRAFFIC:" in upper_line and ">>" not in line:

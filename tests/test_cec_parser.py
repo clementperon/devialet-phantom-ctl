@@ -28,6 +28,10 @@ def test_parse_cec_ignores_non_volume_key() -> None:
     assert parse_cec_line("USER_CONTROL_PRESSED: PLAY") is None
 
 
+def test_parse_cec_ignores_key_released_human_line() -> None:
+    assert parse_cec_line("key released: volume down (42) D:152ms") is None
+
+
 def test_parse_cec_hex_traffic_user_control_pressed() -> None:
     up = parse_cec_line("TRAFFIC: [ 2735]\t>> 05:44:41")
     down = parse_cec_line("TRAFFIC: [ 4071]\t>> 05:44:42")

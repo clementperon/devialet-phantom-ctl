@@ -66,9 +66,6 @@ class DaemonRunner:
                     if event.kind == InputEventType.SET_AUDIO_VOLUME_LEVEL:
                         self._handle_set_audio_volume_level(adapter, event)
                         continue
-                    if event.kind == InputEventType.USER_CONTROL_RELEASED:
-                        self._report_audio_status(adapter)
-                        continue
                     if event.kind == InputEventType.GIVE_AUDIO_STATUS:
                         self._report_audio_status(adapter)
                         continue
