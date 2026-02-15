@@ -26,6 +26,8 @@ class DaemonRunner:
     def __init__(self, cfg: DaemonConfig, gateway: DevialetHttpGateway) -> None:
         self.cfg = cfg
         self.gateway = gateway
+        self._cached_volume: int | None = None
+        self._cached_muted: bool | None = None
         self.router = EventRouter(
             service=VolumeService(gateway),
             policy=EventPolicy(
@@ -72,6 +74,7 @@ class DaemonRunner:
                         continue
                     handled = self.router.handle(event)
                     if handled:
+                        self._update_cache_after_relative_event(event.kind)
                         LOG.debug("handled event=%s key=%s", event.kind.value, event.key)
                         self._report_audio_status(adapter)
                 backoff_s = self.cfg.reconnect_delay_s
@@ -99,8 +102,7 @@ class DaemonRunner:
         if not hasattr(adapter, "send_tx"):
             return
         try:
-            volume = max(0, min(100, int(self.gateway.get_volume())))
-            muted = bool(getattr(self.gateway, "get_mute_state", lambda: False)())
+            volume, muted = self._get_audio_state()
             status = (0x80 if muted else 0x00) | (volume & 0x7F)
             frame = f"50:7A:{status:02X}"
             sent = adapter.send_tx(frame)
@@ -116,12 +118,19 @@ class DaemonRunner:
             target_volume = event.value
             if target_volume is None:
                 return
-            self.gateway.set_volume(max(0, min(100, int(target_volume))))
+            target_volume = max(0, min(100, int(target_volume)))
+            self.gateway.set_volume(target_volume)
+            self._cached_volume = target_volume
 
             if event.muted is not None and hasattr(self.gateway, "get_mute_state"):
-                current_muted = bool(self.gateway.get_mute_state())
+                current_muted = (
+                    self._cached_muted
+                    if self._cached_muted is not None
+                    else bool(self.gateway.get_mute_state())
+                )
                 if bool(event.muted) != current_muted:
                     self.gateway.mute_toggle()
+                self._cached_muted = bool(event.muted)
 
             LOG.debug(
                 "handled CEC set_audio_volume_level volume=%s muted=%s",
@@ -131,3 +140,20 @@ class DaemonRunner:
             self._report_audio_status(adapter)
         except Exception as exc:
             LOG.debug("failed to handle CEC set_audio_volume_level: %s", exc)
+
+    def _get_audio_state(self) -> tuple[int, bool]:
+        if self._cached_volume is None:
+            self._cached_volume = max(0, min(100, int(self.gateway.get_volume())))
+        if self._cached_muted is None:
+            self._cached_muted = bool(getattr(self.gateway, "get_mute_state", lambda: False)())
+        return self._cached_volume, self._cached_muted
+
+    def _update_cache_after_relative_event(self, kind: InputEventType) -> None:
+        if kind == InputEventType.VOLUME_UP and self._cached_volume is not None:
+            self._cached_volume = min(100, self._cached_volume + 1)
+            return
+        if kind == InputEventType.VOLUME_DOWN and self._cached_volume is not None:
+            self._cached_volume = max(0, self._cached_volume - 1)
+            return
+        if kind == InputEventType.MUTE and self._cached_muted is not None:
+            self._cached_muted = not self._cached_muted

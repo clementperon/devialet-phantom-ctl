@@ -327,3 +327,70 @@ def test_daemon_runner_reports_status_on_user_control_released(monkeypatch) -> N
         pass
 
     assert sent_frames == ["50:7A:1D"]
+
+
+def test_daemon_runner_reuses_cached_audio_state_for_release_report(monkeypatch) -> None:
+    class FakeGateway:
+        def __init__(self):
+            self.get_volume_calls = 0
+            self.get_mute_calls = 0
+            self.current_volume = 10
+
+        def systems(self):
+            return {}
+
+        def get_volume(self):
+            self.get_volume_calls += 1
+            return self.current_volume
+
+        def get_mute_state(self):
+            self.get_mute_calls += 1
+            return False
+
+        def set_volume(self, volume):
+            self.current_volume = volume
+
+        def volume_up(self):
+            return None
+
+        def volume_down(self):
+            return None
+
+        def mute_toggle(self):
+            return None
+
+    from devialetctl.domain.events import InputEvent, InputEventType
+
+    sent_frames: list[str] = []
+
+    class OneShotAdapter:
+        def __init__(self, command):
+            self.command = command
+
+        def events(self):
+            yield InputEvent(kind=InputEventType.VOLUME_UP, source="cec", key="VOLUME_UP")
+            yield InputEvent(
+                kind=InputEventType.USER_CONTROL_RELEASED,
+                source="cec",
+                key="USER_CONTROL_RELEASED",
+            )
+            raise KeyboardInterrupt()
+
+        def send_tx(self, frame: str) -> bool:
+            sent_frames.append(frame)
+            return True
+
+    monkeypatch.setattr("devialetctl.application.daemon.CecClientAdapter", OneShotAdapter)
+    cfg = DaemonConfig(target=RuntimeTarget(ip="10.0.0.2"), min_interval_s=0.0, dedupe_window_s=0.0)
+    gw = FakeGateway()
+    runner = DaemonRunner(cfg=cfg, gateway=gw)
+    try:
+        runner.run_cec_forever()
+    except KeyboardInterrupt:
+        pass
+
+    assert sent_frames == ["50:7A:0B", "50:7A:0B"]
+    # 1 GET from relative step (volume_up) + 1 GET for first report.
+    # The second report on key release must reuse cache (no extra GET).
+    assert gw.get_volume_calls == 2
+    assert gw.get_mute_calls == 1
