@@ -64,6 +64,9 @@ class DaemonRunner:
                     if event.kind == InputEventType.SET_AUDIO_VOLUME_LEVEL:
                         self._handle_set_audio_volume_level(adapter, event)
                         continue
+                    if event.kind == InputEventType.USER_CONTROL_RELEASED:
+                        self._report_audio_status(adapter)
+                        continue
                     if event.kind == InputEventType.GIVE_AUDIO_STATUS:
                         self._report_audio_status(adapter)
                         continue
@@ -99,7 +102,7 @@ class DaemonRunner:
             volume = max(0, min(100, int(self.gateway.get_volume())))
             muted = bool(getattr(self.gateway, "get_mute_state", lambda: False)())
             status = (0x80 if muted else 0x00) | (volume & 0x7F)
-            frames = [f"50:7A:{status:02X}", f"5F:7A:{status:02X}"]
+            frames = ["50:72:01", f"50:7A:{status:02X}"]
             for frame in frames:
                 sent = adapter.send_tx(frame)
                 if sent:

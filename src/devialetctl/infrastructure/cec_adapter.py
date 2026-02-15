@@ -64,6 +64,13 @@ def parse_cec_line(line: str, source: str = "cec") -> InputEvent | None:
             if mapped is not None:
                 event, key = mapped
                 return InputEvent(kind=event, source=source, key=key)
+        # CEC USER_CONTROL_RELEASED frame: <srcdst>:45
+        if len(parts) >= 2 and parts[1] == "45":
+            return InputEvent(
+                kind=InputEventType.USER_CONTROL_RELEASED,
+                source=source,
+                key="USER_CONTROL_RELEASED",
+            )
         # CEC SET_AUDIO_VOLUME_LEVEL frame: <srcdst>:73:<status-byte>
         if len(parts) >= 3 and parts[1] == "73":
             status = int(parts[2], 16)
