@@ -102,13 +102,12 @@ class DaemonRunner:
             volume = max(0, min(100, int(self.gateway.get_volume())))
             muted = bool(getattr(self.gateway, "get_mute_state", lambda: False)())
             status = (0x80 if muted else 0x00) | (volume & 0x7F)
-            frames = ["50:72:01", f"50:7A:{status:02X}"]
-            for frame in frames:
-                sent = adapter.send_tx(frame)
-                if sent:
-                    LOG.debug("sent CEC audio status frame: %s", frame)
-                else:
-                    LOG.debug("cannot send CEC audio status; adapter not writable")
+            frame = f"50:7A:{status:02X}"
+            sent = adapter.send_tx(frame)
+            if sent:
+                LOG.debug("sent CEC audio status frame: %s", frame)
+            else:
+                LOG.debug("cannot send CEC audio status; adapter not writable")
         except Exception as exc:
             LOG.debug("failed to report CEC audio status: %s", exc)
 
