@@ -136,6 +136,7 @@ index = 0
 Use `log_level = "DEBUG"` (or `DEVIALETCTL_LOG_LEVEL=DEBUG`) to log raw HDMI-CEC frames:
 - `CEC RX frame: ...` for received CEC frames from `/dev/cec0`
 - `CEC TX: tx ...` for transmitted frames
+- watcher-side `external audio-state changed; notified TV ...` when Devialet-side state changes are pushed to TV
 
 Environment overrides:
 - `DEVIALETCTL_IP`

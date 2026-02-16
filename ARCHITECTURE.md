@@ -12,7 +12,7 @@ Provide a maintainable local-control platform for Devialet Phantom volume, with:
 - Keep business behavior in `domain` + `application`, keep side effects in `infrastructure`.
 - Preserve CLI compatibility while evolving internals.
 - Treat input methods as adapters that emit normalized events.
-- Prefer explicit fallback paths for runtime resilience.
+- Prefer async-first I/O paths for runtime resilience and predictable concurrency.
 
 ## Layered Structure
 
@@ -22,12 +22,12 @@ Provide a maintainable local-control platform for Devialet Phantom volume, with:
 - `src/devialetctl/application`
   - `service.py`: volume use-cases (including +1/-1 relative steps)
   - `router.py`: maps normalized events to actions
-  - `daemon.py`: orchestrates adapter loops and retry behavior
+  - `daemon.py`: async CEC orchestration, watcher polling, and retry behavior
   - `ports.py`: contracts (`VolumeGateway`, discovery target models)
 - `src/devialetctl/infrastructure`
-  - `devialet_gateway.py`: HTTP calls to Devialet API
+  - `devialet_gateway.py`: async HTTP calls to Devialet API (`httpx.AsyncClient`)
   - `mdns_gateway.py`: zeroconf discovery + filtering
-  - `cec_adapter.py`: `cec-client` subprocess parser
+  - `cec_adapter.py`: Linux CEC kernel adapter (`/dev/cec0`, ioctl, async event stream)
   - `keyboard_adapter.py`: single-key or line-based keyboard input
   - `config.py`: typed runtime config (TOML + env overrides)
 - `src/devialetctl/interfaces`
@@ -58,7 +58,7 @@ flowchart LR
   end
 
   subgraph infraLayer [Infrastructure]
-    cecAdapter[CecClientAdapter]
+    cecAdapter[CecKernelAdapter]
     keyboardAdapter[KeyboardAdapter]
     httpGateway[DevialetHttpGateway]
     mdnsGateway[MdnsDiscoveryGateway]
@@ -101,11 +101,51 @@ flowchart LR
 - Relative volume operations are precise:
   - `volup` -> `current + 1`
   - `voldown` -> `current - 1`
-  - fallback to native `volumeUp/volumeDown` endpoint if get/set path fails.
+  - fallback to native async `volumeUp/volumeDown` endpoint if get/set path fails.
+- CEC daemon path is async-only:
+  - `CecKernelAdapter.async_events()` reads kernel CEC frames
+  - external Devialet watcher polls volume/mute and reports changes to TV
+  - watcher polling and CEC command handling are serialized with an async lock
+  - watcher is temporarily suspended while handling inbound CEC push commands
 - Daemon policy protects API/device from repeated bursts:
   - dedupe window
   - minimum emit interval
   - retry/backoff loop for adapter failures.
+
+## Concurrency Model
+
+CEC daemon runtime has two concurrent async producers:
+- CEC receiver stream (`async_events`) for inbound TV commands
+- external watcher polling Devialet HTTP state
+
+To avoid race conditions, both paths serialize all Devialet I/O and cache mutations with a shared async lock.  
+Additionally, CEC handling temporarily suspends watcher polling while a push/update is in progress.
+
+```mermaid
+sequenceDiagram
+  participant TV as Samsung TV (CEC)
+  participant CEC as CecKernelAdapter.async_events
+  participant D as DaemonRunner
+  participant W as External Watcher
+  participant API as Devialet HTTP API
+
+  W->>D: tick (every N ms)
+  D->>D: acquire io_lock
+  D->>API: GET volume + mute
+  API-->>D: current state
+  D->>D: release io_lock
+
+  TV->>CEC: 0x89/0x44/0x73 command
+  CEC-->>D: InputEvent
+  D->>D: suspend watcher window
+  D->>D: acquire io_lock
+  D->>API: POST/GET for command handling
+  D->>TV: TX REPORT_AUDIO_STATUS / vendor response
+  D->>D: release io_lock
+
+  W->>D: next tick during suspend
+  D-->>W: skip poll (no GET)
+```
 
 ## Configuration Model
 
@@ -117,7 +157,7 @@ Config source priority:
 
 Relevant settings:
 - target: `ip`, `port`, `base_path`, `discover_timeout`, `index`
-- daemon: `cec_command`, `reconnect_delay_s`, `log_level`
+- daemon: `cec_device`, `cec_osd_name`, `cec_vendor_id`, `cec_announce_vendor_id`, `reconnect_delay_s`, `log_level`
 - policy: `dedupe_window_s`, `min_interval_s`
 
 ## Compatibility Guarantees
