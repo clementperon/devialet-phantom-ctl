@@ -303,7 +303,8 @@ class CecKernelAdapter:
         fcntl.ioctl(fd, CEC_ADAP_G_LOG_ADDRS, current)
         if self._has_audio_system_claim(current):
             LOG.info(
-                "kernel cec adapter already configured as Audio System (mask=0x%04X), skipping logical-address claim",
+                "kernel cec adapter already configured as Audio System "
+                "(mask=0x%04X), skipping logical-address claim",
                 int(current.log_addr_mask),
             )
             return
@@ -331,7 +332,8 @@ class CecKernelAdapter:
                 if idx >= len(retry_delays) - 1:
                     raise OSError(
                         errno.EBUSY,
-                        "CEC logical address claim is busy; another CEC owner or stale adapter state is active",
+                        "CEC logical address claim is busy; another CEC owner "
+                        "or stale adapter state is active",
                     ) from exc
                 LOG.warning(
                     "CEC logical address claim busy (attempt %d/%d), retrying in %.2fs",
