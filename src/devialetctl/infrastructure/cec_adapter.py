@@ -350,8 +350,8 @@ class CecKernelAdapter:
                 if not frame:
                     await asyncio.sleep(self._async_poll_interval_s)
                     continue
-                LOG.debug("CEC RX frame: %s", frame)
-                LOG.debug("CEC RX decoded: %s -> %s", frame, format_cec_frame_human(frame))
+                LOG.info("CEC RX frame: %s", frame)
+                LOG.info("CEC RX decoded: %s -> %s", frame, format_cec_frame_human(frame))
                 event = parse_cec_frame(frame, source=self.source)
                 if event is not None:
                     yield event
@@ -368,12 +368,12 @@ class CecKernelAdapter:
         if fd is None:
             return False
         upper_frame = frame.upper()
-        LOG.debug("CEC TX: tx %s", upper_frame)
+        LOG.info("CEC TX frame: %s", upper_frame)
         LOG.debug("CEC TX decoded: %s -> %s", upper_frame, format_cec_frame_human(upper_frame))
         try:
             msg = self._msg_from_frame(upper_frame)
             fcntl.ioctl(fd, CEC_TRANSMIT, msg)
             return True
         except (ValueError, OSError) as exc:
-            LOG.debug("failed to transmit CEC frame %s: %s", upper_frame, exc)
+            LOG.warning("failed to transmit CEC frame %s: %s", upper_frame, exc)
             return False
