@@ -9,22 +9,22 @@ def test_daemon_runner_routes_events(monkeypatch) -> None:
         def __init__(self):
             self.calls = []
 
-        def systems(self):
+        async def systems_async(self):
             return {}
 
-        def get_volume(self):
+        async def get_volume_async(self):
             return 0
 
-        def set_volume(self, volume):
+        async def set_volume_async(self, volume):
             self.calls.append(("set", volume))
 
-        def volume_up(self):
+        async def volume_up_async(self):
             self.calls.append("up")
 
-        def volume_down(self):
+        async def volume_down_async(self):
             self.calls.append("down")
 
-        def mute_toggle(self):
+        async def mute_toggle_async(self):
             self.calls.append("mute")
 
     from devialetctl.domain.events import InputEvent, InputEventType
@@ -33,7 +33,7 @@ def test_daemon_runner_routes_events(monkeypatch) -> None:
         def __init__(self, **kwargs):
             self.kwargs = kwargs
 
-        def events(self):
+        async def async_events(self):
             yield InputEvent(kind=InputEventType.VOLUME_UP, source="cec", key="VOLUME_UP")
             raise KeyboardInterrupt()
 
@@ -53,22 +53,22 @@ def test_daemon_runner_keyboard_mode(monkeypatch) -> None:
         def __init__(self):
             self.calls = []
 
-        def systems(self):
+        async def systems_async(self):
             return {}
 
-        def get_volume(self):
+        async def get_volume_async(self):
             return 10
 
-        def set_volume(self, volume):
+        async def set_volume_async(self, volume):
             self.calls.append(("set", volume))
 
-        def volume_up(self):
+        async def volume_up_async(self):
             self.calls.append("up")
 
-        def volume_down(self):
+        async def volume_down_async(self):
             self.calls.append("down")
 
-        def mute_toggle(self):
+        async def mute_toggle_async(self):
             self.calls.append("mute")
 
     from devialetctl.domain.events import InputEvent, InputEventType
@@ -87,25 +87,25 @@ def test_daemon_runner_keyboard_mode(monkeypatch) -> None:
 
 def test_daemon_runner_reports_cec_audio_status(monkeypatch) -> None:
     class FakeGateway:
-        def systems(self):
+        async def systems_async(self):
             return {}
 
-        def get_volume(self):
+        async def get_volume_async(self):
             return 11
 
-        def get_mute_state(self):
+        async def get_mute_state_async(self):
             return True
 
-        def set_volume(self, volume):
+        async def set_volume_async(self, volume):
             return None
 
-        def volume_up(self):
+        async def volume_up_async(self):
             return None
 
-        def volume_down(self):
+        async def volume_down_async(self):
             return None
 
-        def mute_toggle(self):
+        async def mute_toggle_async(self):
             return None
 
     from devialetctl.domain.events import InputEvent, InputEventType
@@ -116,7 +116,7 @@ def test_daemon_runner_reports_cec_audio_status(monkeypatch) -> None:
         def __init__(self, **kwargs):
             self.kwargs = kwargs
 
-        def events(self):
+        async def async_events(self):
             yield InputEvent(
                 kind=InputEventType.GIVE_AUDIO_STATUS,
                 source="cec",
@@ -142,25 +142,25 @@ def test_daemon_runner_reports_cec_audio_status(monkeypatch) -> None:
 
 def test_daemon_runner_replies_system_audio_and_arc_requests(monkeypatch) -> None:
     class FakeGateway:
-        def systems(self):
+        async def systems_async(self):
             return {}
 
-        def get_volume(self):
+        async def get_volume_async(self):
             return 11
 
-        def get_mute_state(self):
+        async def get_mute_state_async(self):
             return False
 
-        def set_volume(self, volume):
+        async def set_volume_async(self, volume):
             return None
 
-        def volume_up(self):
+        async def volume_up_async(self):
             return None
 
-        def volume_down(self):
+        async def volume_down_async(self):
             return None
 
-        def mute_toggle(self):
+        async def mute_toggle_async(self):
             return None
 
     from devialetctl.domain.events import InputEvent, InputEventType
@@ -171,7 +171,7 @@ def test_daemon_runner_replies_system_audio_and_arc_requests(monkeypatch) -> Non
         def __init__(self, **kwargs):
             self.kwargs = kwargs
 
-        def events(self):
+        async def async_events(self):
             yield InputEvent(
                 kind=InputEventType.SYSTEM_AUDIO_MODE_REQUEST,
                 source="cec",
@@ -220,25 +220,25 @@ def test_daemon_runner_handles_set_audio_volume_level(monkeypatch) -> None:
             self.calls = []
             self.muted = True
 
-        def systems(self):
+        async def systems_async(self):
             return {}
 
-        def get_volume(self):
+        async def get_volume_async(self):
             return 26
 
-        def get_mute_state(self):
+        async def get_mute_state_async(self):
             return self.muted
 
-        def set_volume(self, volume):
+        async def set_volume_async(self, volume):
             self.calls.append(("set", volume))
 
-        def volume_up(self):
+        async def volume_up_async(self):
             return None
 
-        def volume_down(self):
+        async def volume_down_async(self):
             return None
 
-        def mute_toggle(self):
+        async def mute_toggle_async(self):
             self.calls.append("mute")
             self.muted = not self.muted
 
@@ -250,7 +250,7 @@ def test_daemon_runner_handles_set_audio_volume_level(monkeypatch) -> None:
         def __init__(self, **kwargs):
             self.kwargs = kwargs
 
-        def events(self):
+        async def async_events(self):
             yield InputEvent(
                 kind=InputEventType.SET_AUDIO_VOLUME_LEVEL,
                 source="cec",
@@ -279,25 +279,25 @@ def test_daemon_runner_handles_set_audio_volume_level(monkeypatch) -> None:
 
 def test_daemon_runner_reports_status_on_user_control_released(monkeypatch) -> None:
     class FakeGateway:
-        def systems(self):
+        async def systems_async(self):
             return {}
 
-        def get_volume(self):
+        async def get_volume_async(self):
             return 29
 
-        def get_mute_state(self):
+        async def get_mute_state_async(self):
             return False
 
-        def set_volume(self, volume):
+        async def set_volume_async(self, volume):
             return None
 
-        def volume_up(self):
+        async def volume_up_async(self):
             return None
 
-        def volume_down(self):
+        async def volume_down_async(self):
             return None
 
-        def mute_toggle(self):
+        async def mute_toggle_async(self):
             return None
 
     from devialetctl.domain.events import InputEvent, InputEventType
@@ -308,7 +308,7 @@ def test_daemon_runner_reports_status_on_user_control_released(monkeypatch) -> N
         def __init__(self, **kwargs):
             self.kwargs = kwargs
 
-        def events(self):
+        async def async_events(self):
             yield InputEvent(
                 kind=InputEventType.USER_CONTROL_RELEASED,
                 source="cec",
@@ -338,27 +338,27 @@ def test_daemon_runner_reuses_cached_audio_state_for_release_report(monkeypatch)
             self.get_mute_calls = 0
             self.current_volume = 10
 
-        def systems(self):
+        async def systems_async(self):
             return {}
 
-        def get_volume(self):
+        async def get_volume_async(self):
             self.get_volume_calls += 1
             return self.current_volume
 
-        def get_mute_state(self):
+        async def get_mute_state_async(self):
             self.get_mute_calls += 1
             return False
 
-        def set_volume(self, volume):
+        async def set_volume_async(self, volume):
             self.current_volume = volume
 
-        def volume_up(self):
+        async def volume_up_async(self):
             return None
 
-        def volume_down(self):
+        async def volume_down_async(self):
             return None
 
-        def mute_toggle(self):
+        async def mute_toggle_async(self):
             return None
 
     from devialetctl.domain.events import InputEvent, InputEventType
@@ -369,7 +369,7 @@ def test_daemon_runner_reuses_cached_audio_state_for_release_report(monkeypatch)
         def __init__(self, **kwargs):
             self.kwargs = kwargs
 
-        def events(self):
+        async def async_events(self):
             yield InputEvent(kind=InputEventType.VOLUME_UP, source="cec", key="VOLUME_UP")
             yield InputEvent(
                 kind=InputEventType.USER_CONTROL_RELEASED,
@@ -399,25 +399,25 @@ def test_daemon_runner_reuses_cached_audio_state_for_release_report(monkeypatch)
 
 def test_daemon_runner_replies_samsung_vendor_95(monkeypatch) -> None:
     class FakeGateway:
-        def systems(self):
+        async def systems_async(self):
             return {}
 
-        def get_volume(self):
+        async def get_volume_async(self):
             return 43
 
-        def get_mute_state(self):
+        async def get_mute_state_async(self):
             return False
 
-        def set_volume(self, volume):
+        async def set_volume_async(self, volume):
             return None
 
-        def volume_up(self):
+        async def volume_up_async(self):
             return None
 
-        def volume_down(self):
+        async def volume_down_async(self):
             return None
 
-        def mute_toggle(self):
+        async def mute_toggle_async(self):
             return None
 
     from devialetctl.domain.events import InputEvent, InputEventType
@@ -428,7 +428,7 @@ def test_daemon_runner_replies_samsung_vendor_95(monkeypatch) -> None:
         def __init__(self, **kwargs):
             self.kwargs = kwargs
 
-        def events(self):
+        async def async_events(self):
             yield InputEvent(
                 kind=InputEventType.SAMSUNG_VENDOR_COMMAND,
                 source="cec",
@@ -455,25 +455,25 @@ def test_daemon_runner_replies_samsung_vendor_95(monkeypatch) -> None:
 
 def test_daemon_runner_ignores_samsung_vendor_unknown_vectors(monkeypatch) -> None:
     class FakeGateway:
-        def systems(self):
+        async def systems_async(self):
             return {}
 
-        def get_volume(self):
+        async def get_volume_async(self):
             return 12
 
-        def get_mute_state(self):
+        async def get_mute_state_async(self):
             return False
 
-        def set_volume(self, volume):
+        async def set_volume_async(self, volume):
             return None
 
-        def volume_up(self):
+        async def volume_up_async(self):
             return None
 
-        def volume_down(self):
+        async def volume_down_async(self):
             return None
 
-        def mute_toggle(self):
+        async def mute_toggle_async(self):
             return None
 
     from devialetctl.domain.events import InputEvent, InputEventType
@@ -484,7 +484,7 @@ def test_daemon_runner_ignores_samsung_vendor_unknown_vectors(monkeypatch) -> No
         def __init__(self, **kwargs):
             self.kwargs = kwargs
 
-        def events(self):
+        async def async_events(self):
             yield InputEvent(
                 kind=InputEventType.SAMSUNG_VENDOR_COMMAND,
                 source="cec",
@@ -522,25 +522,25 @@ def test_daemon_runner_applies_samsung_vendor_96_volume(monkeypatch) -> None:
         def __init__(self):
             self.calls = []
 
-        def systems(self):
+        async def systems_async(self):
             return {}
 
-        def get_volume(self):
+        async def get_volume_async(self):
             return 12
 
-        def get_mute_state(self):
+        async def get_mute_state_async(self):
             return False
 
-        def set_volume(self, volume):
+        async def set_volume_async(self, volume):
             self.calls.append(("set", volume))
 
-        def volume_up(self):
+        async def volume_up_async(self):
             return None
 
-        def volume_down(self):
+        async def volume_down_async(self):
             return None
 
-        def mute_toggle(self):
+        async def mute_toggle_async(self):
             return None
 
     from devialetctl.domain.events import InputEvent, InputEventType
@@ -551,7 +551,7 @@ def test_daemon_runner_applies_samsung_vendor_96_volume(monkeypatch) -> None:
         def __init__(self, **kwargs):
             self.kwargs = kwargs
 
-        def events(self):
+        async def async_events(self):
             yield InputEvent(
                 kind=InputEventType.SAMSUNG_VENDOR_COMMAND,
                 source="cec",
@@ -584,25 +584,25 @@ def test_external_watcher_updates_cache_and_notifies_tv() -> None:
             self.current_volume = 10
             self.current_muted = False
 
-        def systems(self):
+        async def systems_async(self):
             return {}
 
-        def get_volume(self):
+        async def get_volume_async(self):
             return self.current_volume
 
-        def get_mute_state(self):
+        async def get_mute_state_async(self):
             return self.current_muted
 
-        def set_volume(self, volume):
+        async def set_volume_async(self, volume):
             self.current_volume = volume
 
-        def volume_up(self):
+        async def volume_up_async(self):
             return None
 
-        def volume_down(self):
+        async def volume_down_async(self):
             return None
 
-        def mute_toggle(self):
+        async def mute_toggle_async(self):
             self.current_muted = not self.current_muted
 
     class FakeAdapter:
@@ -636,4 +636,66 @@ def test_external_watcher_updates_cache_and_notifies_tv() -> None:
 
     assert runner._cached_volume == 20
     assert runner._cached_muted is False
+    assert adapter.sent_frames == ["50:7A:14"]
+
+
+def test_external_watcher_notifies_tv_on_mute_change_only() -> None:
+    class FakeGateway:
+        def __init__(self):
+            self.current_volume = 20
+            self.current_muted = True
+
+        async def systems_async(self):
+            return {}
+
+        async def get_volume_async(self):
+            return self.current_volume
+
+        async def get_mute_state_async(self):
+            return self.current_muted
+
+        async def set_volume_async(self, volume):
+            self.current_volume = volume
+
+        async def volume_up_async(self):
+            return None
+
+        async def volume_down_async(self):
+            return None
+
+        async def mute_toggle_async(self):
+            self.current_muted = not self.current_muted
+
+    class FakeAdapter:
+        def __init__(self):
+            self.sent_frames: list[str] = []
+
+        def send_tx(self, frame: str) -> bool:
+            self.sent_frames.append(frame)
+            return True
+
+    cfg = DaemonConfig(target=RuntimeTarget(ip="10.0.0.2"), min_interval_s=0.0, dedupe_window_s=0.0)
+    gw = FakeGateway()
+    runner = DaemonRunner(cfg=cfg, gateway=gw)
+    runner._external_watch_interval_s = 0.01
+    runner._cached_volume = 20
+    runner._cached_muted = True
+    adapter = FakeAdapter()
+
+    async def _run_watcher() -> None:
+        stop = asyncio.Event()
+        task = asyncio.create_task(runner._watch_external_audio_state_async(adapter, stop))
+        try:
+            await asyncio.sleep(0.02)
+            gw.current_muted = False
+            await asyncio.sleep(0.05)
+        finally:
+            stop.set()
+            await task
+
+    asyncio.run(_run_watcher())
+
+    assert runner._cached_volume == 20
+    assert runner._cached_muted is False
+    # 20 with muted=False => 0x14
     assert adapter.sent_frames == ["50:7A:14"]

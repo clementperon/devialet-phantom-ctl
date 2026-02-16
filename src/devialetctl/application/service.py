@@ -1,3 +1,5 @@
+import asyncio
+
 from devialetctl.application.ports import VolumeGateway
 
 
@@ -7,29 +9,29 @@ class VolumeService:
         self.step = max(1, int(step))
 
     def systems(self):
-        return self.gateway.systems()
+        return asyncio.run(self.gateway.systems_async())
 
     def get_volume(self) -> int:
-        return self.gateway.get_volume()
+        return int(asyncio.run(self.gateway.get_volume_async()))
 
     def set_volume(self, value: int) -> None:
-        self.gateway.set_volume(value)
+        asyncio.run(self.gateway.set_volume_async(value))
 
     def volume_up(self) -> None:
-        self._relative_step(delta=self.step, fallback=self.gateway.volume_up)
+        self._relative_step(delta=self.step, fallback=self.gateway.volume_up_async)
 
     def volume_down(self) -> None:
-        self._relative_step(delta=-self.step, fallback=self.gateway.volume_down)
+        self._relative_step(delta=-self.step, fallback=self.gateway.volume_down_async)
 
     def mute(self) -> None:
-        self.gateway.mute_toggle()
+        asyncio.run(self.gateway.mute_toggle_async())
 
     def _relative_step(self, delta: int, fallback) -> None:
         try:
-            current = int(self.gateway.get_volume())
+            current = int(asyncio.run(self.gateway.get_volume_async()))
             target = max(0, min(100, current + delta))
             if target != current:
-                self.gateway.set_volume(target)
+                asyncio.run(self.gateway.set_volume_async(target))
         except Exception:
             # Keep compatibility if get/set is temporarily unavailable.
-            fallback()
+            asyncio.run(fallback())

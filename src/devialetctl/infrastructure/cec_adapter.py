@@ -4,10 +4,9 @@ import errno
 import fcntl
 import logging
 import os
-import select
 import time
 from dataclasses import dataclass
-from typing import AsyncIterator, Iterator
+from typing import AsyncIterator
 
 from devialetctl.domain.events import InputEvent, InputEventType
 
@@ -329,40 +328,6 @@ class CecKernelAdapter:
         if msg.sequence and msg.tx_status and not msg.rx_status:
             return ""
         return self._frame_from_msg(msg)
-
-    def events(self) -> Iterator[InputEvent]:
-        LOG.info("starting kernel cec adapter: %s", self.device)
-        fd = os.open(self.device, os.O_RDWR | os.O_NONBLOCK)
-        self._fd = fd
-
-        try:
-            self._configure(fd)
-            if self.announce_vendor_id:
-                self.send_tx(_DISCOVERY_VENDOR_FRAME)
-
-            while True:
-                ready, _, _ = select.select([fd], [], [], 1.0)
-                if not ready:
-                    continue
-                try:
-                    frame = self._receive_one_frame(fd)
-                except OSError as exc:
-                    if exc.errno in {errno.EAGAIN, errno.EWOULDBLOCK, errno.EINTR}:
-                        continue
-                    raise
-                if not frame:
-                    continue
-                LOG.debug("CEC RX frame: %s", frame)
-                LOG.debug("CEC RX decoded: %s -> %s", frame, format_cec_frame_human(frame))
-                event = parse_cec_frame(frame, source=self.source)
-                if event is not None:
-                    yield event
-        finally:
-            self._fd = None
-            try:
-                os.close(fd)
-            except OSError:
-                pass
 
     async def async_events(self) -> AsyncIterator[InputEvent]:
         LOG.info("starting kernel cec adapter (async): %s", self.device)

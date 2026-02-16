@@ -1,3 +1,4 @@
+import asyncio
 import errno
 
 import pytest
@@ -12,7 +13,7 @@ def test_kernel_events_raises_when_open_fails(monkeypatch) -> None:
     monkeypatch.setattr(cec_adapter.os, "open", fake_open)
     adapter = cec_adapter.CecKernelAdapter(device="/dev/cec0")
     with pytest.raises(OSError, match="open failed"):
-        next(adapter.events())
+        asyncio.run(anext(adapter.async_events()))
 
 
 def test_kernel_send_tx_returns_false_when_not_open() -> None:

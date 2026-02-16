@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass
 from typing import Any, Dict
 
@@ -21,19 +22,19 @@ class DevialetClient:
 
     # ---- IP Control endpoints (systemId "current") ----
     def systems(self) -> Dict[str, Any]:
-        return self._gateway.systems()
+        return asyncio.run(self._gateway.systems_async())
 
     def get_volume(self) -> int:
-        return self._gateway.get_volume()
+        return int(asyncio.run(self._gateway.get_volume_async()))
 
     def set_volume(self, volume: int) -> None:
-        self._gateway.set_volume(volume)
+        asyncio.run(self._gateway.set_volume_async(volume))
 
     def volume_up(self) -> None:
-        self._gateway.volume_up()
+        asyncio.run(self._gateway.volume_up_async())
 
     def volume_down(self) -> None:
-        self._gateway.volume_down()
+        asyncio.run(self._gateway.volume_down_async())
 
     def mute_toggle(self) -> None:
-        self._gateway.mute_toggle()
+        asyncio.run(self._gateway.mute_toggle_async())
