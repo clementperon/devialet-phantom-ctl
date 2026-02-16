@@ -617,6 +617,7 @@ def test_external_watcher_updates_cache_and_notifies_tv() -> None:
     gw = FakeGateway()
     runner = DaemonRunner(cfg=cfg, gateway=gw)
     runner._external_watch_interval_s = 0.01
+    runner._io_lock = asyncio.Lock()
     runner._cached_volume = 10
     runner._cached_muted = False
     adapter = FakeAdapter()
@@ -678,6 +679,7 @@ def test_external_watcher_notifies_tv_on_mute_change_only() -> None:
     gw = FakeGateway()
     runner = DaemonRunner(cfg=cfg, gateway=gw)
     runner._external_watch_interval_s = 0.01
+    runner._io_lock = asyncio.Lock()
     runner._cached_volume = 20
     runner._cached_muted = True
     adapter = FakeAdapter()
@@ -699,3 +701,48 @@ def test_external_watcher_notifies_tv_on_mute_change_only() -> None:
     assert runner._cached_muted is False
     # 20 with muted=False => 0x14
     assert adapter.sent_frames == ["50:7A:14"]
+
+
+def test_external_watcher_is_suspended_during_cec_push_window() -> None:
+    class FakeGateway:
+        def __init__(self):
+            self.get_volume_calls = 0
+            self.get_mute_calls = 0
+
+        async def systems_async(self):
+            return {}
+
+        async def get_volume_async(self):
+            self.get_volume_calls += 1
+            return 20
+
+        async def get_mute_state_async(self):
+            self.get_mute_calls += 1
+            return False
+
+        async def set_volume_async(self, volume):
+            return None
+
+        async def volume_up_async(self):
+            return None
+
+        async def volume_down_async(self):
+            return None
+
+        async def mute_toggle_async(self):
+            return None
+
+    cfg = DaemonConfig(target=RuntimeTarget(ip="10.0.0.2"), min_interval_s=0.0, dedupe_window_s=0.0)
+    gw = FakeGateway()
+    runner = DaemonRunner(cfg=cfg, gateway=gw)
+    runner._external_watch_suspend_s = 1.0
+    runner._io_lock = asyncio.Lock()
+    runner._suspend_external_watch_for_push()
+
+    changed, volume, muted = asyncio.run(runner._poll_external_audio_state_once_async())
+
+    assert changed is False
+    assert volume == 0
+    assert muted is False
+    assert gw.get_volume_calls == 0
+    assert gw.get_mute_calls == 0

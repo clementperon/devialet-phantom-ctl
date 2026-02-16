@@ -15,6 +15,7 @@ def test_parse_cec_user_control_pressed_variants() -> None:
     assert event3 is not None
     assert event3.kind == InputEventType.MUTE
 
+
 def test_parse_cec_user_control_released() -> None:
     released = parse_cec_frame("05:45")
     assert released is not None

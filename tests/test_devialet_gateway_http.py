@@ -26,6 +26,7 @@ def test_gateway_get_and_post_low_level(monkeypatch) -> None:
 
 def test_gateway_get_volume_raises_on_unexpected_payload(monkeypatch) -> None:
     gw = DevialetHttpGateway(address="10.0.0.2")
+
     async def fake_aget(_path):
         return {"unexpected": 1}
 
