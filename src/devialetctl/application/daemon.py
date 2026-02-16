@@ -115,19 +115,19 @@ class DaemonRunner:
             if not self.router.policy.should_emit(event):
                 return
             if event.kind == InputEventType.VOLUME_UP:
-                await self._relative_step_async(delta=1, fallback=self._gateway_volume_up_async)
+                await self._relative_step_async(delta=1, fallback=self.gateway.volume_up_async)
                 self._update_cache_after_relative_event(event.kind)
                 LOG.debug("handled event=%s key=%s", event.kind.value, event.key)
                 await self._report_audio_status_async(adapter)
                 return
             if event.kind == InputEventType.VOLUME_DOWN:
-                await self._relative_step_async(delta=-1, fallback=self._gateway_volume_down_async)
+                await self._relative_step_async(delta=-1, fallback=self.gateway.volume_down_async)
                 self._update_cache_after_relative_event(event.kind)
                 LOG.debug("handled event=%s key=%s", event.kind.value, event.key)
                 await self._report_audio_status_async(adapter)
                 return
             if event.kind == InputEventType.MUTE:
-                await self._gateway_mute_toggle_async()
+                await self.gateway.mute_toggle_async()
                 self._update_cache_after_relative_event(event.kind)
                 LOG.debug("handled event=%s key=%s", event.kind.value, event.key)
                 await self._report_audio_status_async(adapter)
@@ -169,7 +169,7 @@ class DaemonRunner:
             if target_volume is None:
                 return
             target_volume = max(0, min(100, int(target_volume)))
-            await self._gateway_set_volume_async(target_volume)
+            await self.gateway.set_volume_async(target_volume)
             self._cached_volume = target_volume
             self._sync_vendor_state_from_volume(target_volume)
 
@@ -177,10 +177,10 @@ class DaemonRunner:
                 current_muted = (
                     self._cached_muted
                     if self._cached_muted is not None
-                    else await self._gateway_get_mute_state_async()
+                    else await self.gateway.get_mute_state_async()
                 )
                 if bool(event.muted) != current_muted:
-                    await self._gateway_mute_toggle_async()
+                    await self.gateway.mute_toggle_async()
                 self._cached_muted = bool(event.muted)
 
             LOG.debug(
@@ -229,7 +229,7 @@ class DaemonRunner:
                 if 0 <= candidate <= 100:
                     current = self._cached_volume
                     if current != candidate:
-                        await self._gateway_set_volume_async(candidate)
+                        await self.gateway.set_volume_async(candidate)
                     self._vendor_state_byte = candidate
                     self._cached_volume = candidate
             return
@@ -245,11 +245,11 @@ class DaemonRunner:
         cached_volume = self._cached_volume
         cached_muted = self._cached_muted
         if cached_volume is None:
-            cached_volume = max(0, min(100, int(await self._gateway_get_volume_async())))
+            cached_volume = max(0, min(100, int(await self.gateway.get_volume_async())))
             self._cached_volume = cached_volume
             self._sync_vendor_state_from_volume(cached_volume)
         if cached_muted is None:
-            cached_muted = await self._gateway_get_mute_state_async()
+            cached_muted = await self.gateway.get_mute_state_async()
             self._cached_muted = cached_muted
         return cached_volume, cached_muted
 
@@ -305,8 +305,8 @@ class DaemonRunner:
             if self._is_external_watch_suspended():
                 return False, 0, False
             try:
-                volume = max(0, min(100, int(await self._gateway_get_volume_async())))
-                muted = await self._gateway_get_mute_state_async()
+                volume = max(0, min(100, int(await self.gateway.get_volume_async())))
+                muted = await self.gateway.get_mute_state_async()
             except Exception as exc:
                 LOG.debug("external audio-state polling failed: %s", exc)
                 return False, 0, False
@@ -335,29 +335,11 @@ class DaemonRunner:
             raise RuntimeError("I/O lock is not initialized")
         return self._io_lock
 
-    async def _gateway_get_volume_async(self) -> int:
-        return int(await self.gateway.get_volume_async())
-
-    async def _gateway_set_volume_async(self, volume: int) -> None:
-        await self.gateway.set_volume_async(volume)
-
-    async def _gateway_get_mute_state_async(self) -> bool:
-        return bool(await self.gateway.get_mute_state_async())
-
-    async def _gateway_volume_up_async(self) -> None:
-        await self.gateway.volume_up_async()
-
-    async def _gateway_volume_down_async(self) -> None:
-        await self.gateway.volume_down_async()
-
-    async def _gateway_mute_toggle_async(self) -> None:
-        await self.gateway.mute_toggle_async()
-
     async def _relative_step_async(self, delta: int, fallback) -> None:
         try:
-            current = int(await self._gateway_get_volume_async())
+            current = int(await self.gateway.get_volume_async())
             target = max(0, min(100, current + delta))
             if target != current:
-                await self._gateway_set_volume_async(target)
+                await self.gateway.set_volume_async(target)
         except Exception:
             await fallback()
