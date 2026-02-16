@@ -65,6 +65,7 @@ flowchart LR
     configLoader[ConfigLoader]
   end
 
+  devialetSpeaker[DevialetSpeaker]
   tvRemote[TVRemote] --> cecAdapter
   keyboardInput[KeyboardTTY] --> keyboardAdapter
   cecAdapter --> daemonRunner
@@ -76,6 +77,8 @@ flowchart LR
   eventRouter --> volumeService
   cliInterface --> volumeService
   volumeService --> httpGateway
+  httpGateway --> devialetSpeaker
+  devialetSpeaker --> mdnsGateway
   daemonInterface --> mdnsGateway
   cliInterface --> mdnsGateway
   configLoader --> daemonInterface
