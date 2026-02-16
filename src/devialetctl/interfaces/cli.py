@@ -145,9 +145,7 @@ def main() -> None:
             cfg = dataclasses.replace(
                 cfg,
                 cec_device=(
-                    args.daemon_cec_device
-                    if args.daemon_cec_device is not None
-                    else cfg.cec_device
+                    args.daemon_cec_device if args.daemon_cec_device is not None else cfg.cec_device
                 ),
                 cec_osd_name=(
                     args.daemon_cec_osd_name

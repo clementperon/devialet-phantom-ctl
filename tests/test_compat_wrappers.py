@@ -7,24 +7,24 @@ def test_devialet_client_delegates_to_gateway(monkeypatch) -> None:
         def __init__(self, address, port, base_path, timeout_s):
             self.calls = []
 
-        def systems(self):
+        async def systems_async(self):
             self.calls.append("systems")
             return {"ok": True}
 
-        def get_volume(self):
+        async def get_volume_async(self):
             self.calls.append("get_volume")
             return 42
 
-        def set_volume(self, value):
+        async def set_volume_async(self, value):
             self.calls.append(("set_volume", value))
 
-        def volume_up(self):
+        async def volume_up_async(self):
             self.calls.append("volume_up")
 
-        def volume_down(self):
+        async def volume_down_async(self):
             self.calls.append("volume_down")
 
-        def mute_toggle(self):
+        async def mute_toggle_async(self):
             self.calls.append("mute_toggle")
 
     monkeypatch.setattr("devialetctl.api.DevialetHttpGateway", FakeGateway)

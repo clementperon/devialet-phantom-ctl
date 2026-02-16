@@ -7,24 +7,24 @@ def test_volume_up_uses_plus_one_with_set_volume() -> None:
             self.current = 50
             self.calls = []
 
-        def systems(self):
+        async def systems_async(self):
             return {}
 
-        def get_volume(self):
+        async def get_volume_async(self):
             self.calls.append("get")
             return self.current
 
-        def set_volume(self, value):
+        async def set_volume_async(self, value):
             self.calls.append(("set", value))
             self.current = value
 
-        def volume_up(self):
+        async def volume_up_async(self):
             self.calls.append("native_up")
 
-        def volume_down(self):
+        async def volume_down_async(self):
             self.calls.append("native_down")
 
-        def mute_toggle(self):
+        async def mute_toggle_async(self):
             self.calls.append("mute")
 
     gw = FakeGateway()
@@ -39,24 +39,24 @@ def test_volume_down_uses_minus_one_with_set_volume() -> None:
             self.current = 30
             self.calls = []
 
-        def systems(self):
+        async def systems_async(self):
             return {}
 
-        def get_volume(self):
+        async def get_volume_async(self):
             self.calls.append("get")
             return self.current
 
-        def set_volume(self, value):
+        async def set_volume_async(self, value):
             self.calls.append(("set", value))
             self.current = value
 
-        def volume_up(self):
+        async def volume_up_async(self):
             self.calls.append("native_up")
 
-        def volume_down(self):
+        async def volume_down_async(self):
             self.calls.append("native_down")
 
-        def mute_toggle(self):
+        async def mute_toggle_async(self):
             self.calls.append("mute")
 
     gw = FakeGateway()
@@ -67,22 +67,22 @@ def test_volume_down_uses_minus_one_with_set_volume() -> None:
 
 def test_volume_service_falls_back_to_native_when_get_fails() -> None:
     class FakeGateway:
-        def systems(self):
+        async def systems_async(self):
             return {}
 
-        def get_volume(self):
+        async def get_volume_async(self):
             raise RuntimeError("no volume")
 
-        def set_volume(self, value):
+        async def set_volume_async(self, value):
             raise AssertionError("should not call set_volume")
 
-        def volume_up(self):
+        async def volume_up_async(self):
             self.used_native_up = True
 
-        def volume_down(self):
+        async def volume_down_async(self):
             self.used_native_down = True
 
-        def mute_toggle(self):
+        async def mute_toggle_async(self):
             return None
 
     gw = FakeGateway()

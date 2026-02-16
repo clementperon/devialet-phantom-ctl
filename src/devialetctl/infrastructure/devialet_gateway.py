@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Any
 
-import requests
+import httpx
 
 from devialetctl.application.ports import VolumeGateway
 
@@ -26,52 +26,52 @@ class DevialetHttpGateway(VolumeGateway):
         self.base_path = normalize_base_path(self.base_path)
         self.base_url = f"http://{self.address}:{self.port}{self.base_path}"
 
-    def _get(self, path: str) -> dict[str, Any]:
-        r = requests.get(self.base_url + path, timeout=self.timeout_s)
+    async def _aget(self, path: str) -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=self.timeout_s) as client:
+            r = await client.get(self.base_url + path)
         r.raise_for_status()
         return r.json()
 
-    def _post(self, path: str, payload: dict[str, Any] | None = None) -> None:
-        r = requests.post(
-            self.base_url + path,
-            json=(payload if payload is not None else {}),
-            timeout=self.timeout_s,
-        )
+    async def _apost(self, path: str, payload: dict[str, Any] | None = None) -> None:
+        async with httpx.AsyncClient(timeout=self.timeout_s) as client:
+            r = await client.post(
+                self.base_url + path,
+                json=(payload if payload is not None else {}),
+            )
         r.raise_for_status()
 
-    def systems(self) -> dict[str, Any]:
+    async def systems_async(self) -> dict[str, Any]:
         try:
-            return self._get("/systems")
-        except requests.HTTPError as exc:
+            return await self._aget("/systems")
+        except httpx.HTTPStatusError as exc:
             response = getattr(exc, "response", None)
             if getattr(response, "status_code", None) == 404:
-                return self._get("/systems/current")
+                return await self._aget("/systems/current")
             raise
 
-    def get_volume(self) -> int:
-        data = self._get("/systems/current/sources/current/soundControl/volume")
+    async def get_volume_async(self) -> int:
+        data = await self._aget("/systems/current/sources/current/soundControl/volume")
         if "volume" not in data:
             raise ValueError(f"Unexpected response: {data}")
         return int(data["volume"])
 
-    def set_volume(self, volume: int) -> None:
+    async def set_volume_async(self, volume: int) -> None:
         v = max(0, min(100, int(volume)))
-        self._post("/systems/current/sources/current/soundControl/volume", {"volume": v})
+        await self._apost("/systems/current/sources/current/soundControl/volume", {"volume": v})
 
-    def get_mute_state(self) -> bool:
-        state = self._get("/groups/current/sources/current")
+    async def get_mute_state_async(self) -> bool:
+        state = await self._aget("/groups/current/sources/current")
         mute_state = str(state.get("muteState", "")).lower()
         return mute_state == "muted"
 
-    def volume_up(self) -> None:
-        self._post("/systems/current/sources/current/soundControl/volumeUp")
+    async def volume_up_async(self) -> None:
+        await self._apost("/systems/current/sources/current/soundControl/volumeUp")
 
-    def volume_down(self) -> None:
-        self._post("/systems/current/sources/current/soundControl/volumeDown")
+    async def volume_down_async(self) -> None:
+        await self._apost("/systems/current/sources/current/soundControl/volumeDown")
 
-    def mute_toggle(self) -> None:
-        # Spec-compliant mute path: group playback namespace.
-        if self.get_mute_state():
-            self._post("/groups/current/sources/current/playback/unmute")
+    async def mute_toggle_async(self) -> None:
+        if await self.get_mute_state_async():
+            await self._apost("/groups/current/sources/current/playback/unmute")
         else:
-            self._post("/groups/current/sources/current/playback/mute")
+            await self._apost("/groups/current/sources/current/playback/mute")

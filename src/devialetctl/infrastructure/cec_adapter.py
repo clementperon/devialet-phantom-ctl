@@ -1,13 +1,12 @@
+import asyncio
 import ctypes
 import errno
 import fcntl
 import logging
 import os
-import re
-import select
 import time
 from dataclasses import dataclass
-from typing import Iterator
+from typing import AsyncIterator
 
 from devialetctl.domain.events import InputEvent, InputEventType
 
@@ -69,21 +68,6 @@ _CEC_OPCODE_NAMES: dict[str, str] = {
     "C5": "TERMINATE_ARC",
 }
 
-_PATTERNS: list[tuple[re.Pattern[str], InputEventType, str]] = [
-    (
-        re.compile(r"\bVOLUME[_\s-]?UP\b", flags=re.IGNORECASE),
-        InputEventType.VOLUME_UP,
-        "VOLUME_UP",
-    ),
-    (
-        re.compile(r"\bVOLUME[_\s-]?DOWN\b", flags=re.IGNORECASE),
-        InputEventType.VOLUME_DOWN,
-        "VOLUME_DOWN",
-    ),
-    (re.compile(r"\bMUTE(D)?\b", flags=re.IGNORECASE), InputEventType.MUTE, "MUTE"),
-]
-
-_HEX_CEC_FRAME_RE = re.compile(r"\b(?:[0-9A-Fa-f]{2}:){1,}[0-9A-Fa-f]{2}\b")
 _USER_CONTROL_KEYCODE_MAP: dict[str, tuple[InputEventType, str]] = {
     "41": (InputEventType.VOLUME_UP, "VOLUME_UP"),
     "42": (InputEventType.VOLUME_DOWN, "VOLUME_DOWN"),
@@ -232,33 +216,6 @@ def parse_cec_frame(frame: str, source: str = "cec") -> InputEvent | None:
     return None
 
 
-def parse_cec_line(line: str, source: str = "cec") -> InputEvent | None:
-    upper_line = line.upper()
-    # libCEC emits human-readable "key released: volume ..." lines in addition to
-    # TRAFFIC frames. Treating those as volume events duplicates one key press.
-    if "KEY RELEASED" in upper_line:
-        return None
-    # Same issue for "key pressed: volume ...": with traffic enabled this can
-    # duplicate USER_CONTROL_PRESSED frames (0x44).
-    if "KEY PRESSED:" in upper_line:
-        return None
-    # libCEC traffic lines with "<<" are transmit echoes / adapter chatter.
-    # Only parse inbound CEC traffic (" >> ") to avoid feedback loops.
-    if "TRAFFIC:" in upper_line and ">>" not in line:
-        return None
-
-    frame_match = _HEX_CEC_FRAME_RE.search(line)
-    if frame_match:
-        parsed = parse_cec_frame(frame_match.group(0).upper(), source=source)
-        if parsed is not None:
-            return parsed
-
-    for pattern, event, key in _PATTERNS:
-        if pattern.search(line):
-            return InputEvent(kind=event, source=source, key=key)
-    return None
-
-
 def format_cec_frame_human(frame: str) -> str:
     parts = [p.upper() for p in frame.split(":")]
     if len(parts) < 2 or len(parts[0]) != 2:
@@ -290,6 +247,7 @@ class CecKernelAdapter:
     source: str = "cec"
     _fd: int | None = None
     _log_addrs_busy_retries: tuple[float, ...] = (0.1, 0.25, 0.5)
+    _async_poll_interval_s: float = 0.05
 
     @staticmethod
     def _has_audio_system_claim(addrs: CecLogAddrs) -> bool:
@@ -371,8 +329,8 @@ class CecKernelAdapter:
             return ""
         return self._frame_from_msg(msg)
 
-    def events(self) -> Iterator[InputEvent]:
-        LOG.info("starting kernel cec adapter: %s", self.device)
+    async def async_events(self) -> AsyncIterator[InputEvent]:
+        LOG.info("starting kernel cec adapter (async): %s", self.device)
         fd = os.open(self.device, os.O_RDWR | os.O_NONBLOCK)
         self._fd = fd
 
@@ -382,22 +340,22 @@ class CecKernelAdapter:
                 self.send_tx(_DISCOVERY_VENDOR_FRAME)
 
             while True:
-                ready, _, _ = select.select([fd], [], [], 1.0)
-                if not ready:
-                    continue
                 try:
                     frame = self._receive_one_frame(fd)
                 except OSError as exc:
                     if exc.errno in {errno.EAGAIN, errno.EWOULDBLOCK, errno.EINTR}:
+                        await asyncio.sleep(self._async_poll_interval_s)
                         continue
                     raise
                 if not frame:
+                    await asyncio.sleep(self._async_poll_interval_s)
                     continue
-                LOG.debug("CEC RX frame: %s", frame)
-                LOG.debug("CEC RX decoded: %s -> %s", frame, format_cec_frame_human(frame))
+                LOG.info("CEC RX frame: %s", frame)
+                LOG.info("CEC RX decoded: %s -> %s", frame, format_cec_frame_human(frame))
                 event = parse_cec_frame(frame, source=self.source)
                 if event is not None:
                     yield event
+                await asyncio.sleep(0)
         finally:
             self._fd = None
             try:
@@ -410,12 +368,12 @@ class CecKernelAdapter:
         if fd is None:
             return False
         upper_frame = frame.upper()
-        LOG.debug("CEC TX: tx %s", upper_frame)
+        LOG.info("CEC TX frame: %s", upper_frame)
         LOG.debug("CEC TX decoded: %s -> %s", upper_frame, format_cec_frame_human(upper_frame))
         try:
             msg = self._msg_from_frame(upper_frame)
             fcntl.ioctl(fd, CEC_TRANSMIT, msg)
             return True
         except (ValueError, OSError) as exc:
-            LOG.debug("failed to transmit CEC frame %s: %s", upper_frame, exc)
+            LOG.warning("failed to transmit CEC frame %s: %s", upper_frame, exc)
             return False

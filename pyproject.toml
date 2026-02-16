@@ -5,10 +5,10 @@ description = "Discover Devialet Phantom systems and send IP Control commands."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-  "requests>=2.31",
   "zeroconf>=0.130",
   "tomli>=2.0; python_version < '3.11'",
   "pydantic>=2.12.5",
+  "httpx>=0.28.1",
 ]
 
 [project.scripts]

@@ -38,22 +38,22 @@ def test_cli_getvol_uses_gateway(monkeypatch, capsys) -> None:
         def __init__(self, address, port, base_path):
             self.address = address
 
-        def systems(self):
+        async def systems_async(self):
             return {}
 
-        def get_volume(self):
+        async def get_volume_async(self):
             return 31
 
-        def set_volume(self, value):
+        async def set_volume_async(self, value):
             return None
 
-        def volume_up(self):
+        async def volume_up_async(self):
             return None
 
-        def volume_down(self):
+        async def volume_down_async(self):
             return None
 
-        def mute_toggle(self):
+        async def mute_toggle_async(self):
             return None
 
     monkeypatch.setattr(cli, "MdnsDiscoveryGateway", lambda: FakeDiscovery())
