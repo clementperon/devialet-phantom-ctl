@@ -5,7 +5,7 @@ from devialetctl.application.router import EventRouter
 from devialetctl.application.service import VolumeService
 from devialetctl.domain.events import InputEvent, InputEventType
 from devialetctl.domain.policy import EventPolicy
-from devialetctl.infrastructure.cec_adapter import CecClientAdapter
+from devialetctl.infrastructure.cec_adapter import CecKernelAdapter
 from devialetctl.infrastructure.config import DaemonConfig
 from devialetctl.infrastructure.devialet_gateway import DevialetHttpGateway
 from devialetctl.infrastructure.keyboard_adapter import KeyboardAdapter
@@ -61,7 +61,12 @@ class DaemonRunner:
         max_backoff_s = max(self.cfg.reconnect_delay_s, 20.0)
         while True:
             try:
-                adapter = CecClientAdapter(command=self.cfg.cec_command)
+                adapter = CecKernelAdapter(
+                    device=self.cfg.cec_device,
+                    osd_name=self.cfg.cec_osd_name,
+                    vendor_id=self.cfg.cec_vendor_id,
+                    announce_vendor_id=self.cfg.cec_announce_vendor_id,
+                )
                 for event in adapter.events():
                     if self._handle_cec_system_request(adapter, event.kind):
                         continue
@@ -90,7 +95,7 @@ class DaemonRunner:
                 time.sleep(backoff_s)
                 backoff_s = min(max_backoff_s, backoff_s * 2.0)
 
-    def _handle_cec_system_request(self, adapter: CecClientAdapter, kind: InputEventType) -> bool:
+    def _handle_cec_system_request(self, adapter: CecKernelAdapter, kind: InputEventType) -> bool:
         frame = _CEC_SYSTEM_RESPONSE_MAP.get(kind)
         if frame is None:
             return False
@@ -103,7 +108,7 @@ class DaemonRunner:
             LOG.debug("cannot send CEC system/ARC response frame: %s", frame)
         return True
 
-    def _report_audio_status(self, adapter: CecClientAdapter) -> None:
+    def _report_audio_status(self, adapter: CecKernelAdapter) -> None:
         if not hasattr(adapter, "send_tx"):
             return
         try:
@@ -118,7 +123,7 @@ class DaemonRunner:
         except Exception as exc:
             LOG.debug("failed to report CEC audio status: %s", exc)
 
-    def _handle_set_audio_volume_level(self, adapter: CecClientAdapter, event: InputEvent) -> None:
+    def _handle_set_audio_volume_level(self, adapter: CecKernelAdapter, event: InputEvent) -> None:
         try:
             target_volume = event.value
             if target_volume is None:
@@ -147,7 +152,7 @@ class DaemonRunner:
         except Exception as exc:
             LOG.debug("failed to handle CEC set_audio_volume_level: %s", exc)
 
-    def _handle_samsung_vendor_command(self, adapter: CecClientAdapter, event: InputEvent) -> None:
+    def _handle_samsung_vendor_command(self, adapter: CecKernelAdapter, event: InputEvent) -> None:
         subcommand = event.vendor_subcommand
         payload = event.vendor_payload or ()
         if subcommand is None:
