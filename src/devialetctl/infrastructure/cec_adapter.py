@@ -3,7 +3,6 @@ import errno
 import fcntl
 import logging
 import os
-import re
 import select
 import time
 from dataclasses import dataclass
@@ -69,21 +68,6 @@ _CEC_OPCODE_NAMES: dict[str, str] = {
     "C5": "TERMINATE_ARC",
 }
 
-_PATTERNS: list[tuple[re.Pattern[str], InputEventType, str]] = [
-    (
-        re.compile(r"\bVOLUME[_\s-]?UP\b", flags=re.IGNORECASE),
-        InputEventType.VOLUME_UP,
-        "VOLUME_UP",
-    ),
-    (
-        re.compile(r"\bVOLUME[_\s-]?DOWN\b", flags=re.IGNORECASE),
-        InputEventType.VOLUME_DOWN,
-        "VOLUME_DOWN",
-    ),
-    (re.compile(r"\bMUTE(D)?\b", flags=re.IGNORECASE), InputEventType.MUTE, "MUTE"),
-]
-
-_HEX_CEC_FRAME_RE = re.compile(r"\b(?:[0-9A-Fa-f]{2}:){1,}[0-9A-Fa-f]{2}\b")
 _USER_CONTROL_KEYCODE_MAP: dict[str, tuple[InputEventType, str]] = {
     "41": (InputEventType.VOLUME_UP, "VOLUME_UP"),
     "42": (InputEventType.VOLUME_DOWN, "VOLUME_DOWN"),
@@ -228,33 +212,6 @@ def parse_cec_frame(frame: str, source: str = "cec") -> InputEvent | None:
         mapped = _SYSTEM_REQUEST_OPCODE_MAP.get(parts[1])
         if mapped is not None:
             event, key = mapped
-            return InputEvent(kind=event, source=source, key=key)
-    return None
-
-
-def parse_cec_line(line: str, source: str = "cec") -> InputEvent | None:
-    upper_line = line.upper()
-    # libCEC emits human-readable "key released: volume ..." lines in addition to
-    # TRAFFIC frames. Treating those as volume events duplicates one key press.
-    if "KEY RELEASED" in upper_line:
-        return None
-    # Same issue for "key pressed: volume ...": with traffic enabled this can
-    # duplicate USER_CONTROL_PRESSED frames (0x44).
-    if "KEY PRESSED:" in upper_line:
-        return None
-    # libCEC traffic lines with "<<" are transmit echoes / adapter chatter.
-    # Only parse inbound CEC traffic (" >> ") to avoid feedback loops.
-    if "TRAFFIC:" in upper_line and ">>" not in line:
-        return None
-
-    frame_match = _HEX_CEC_FRAME_RE.search(line)
-    if frame_match:
-        parsed = parse_cec_frame(frame_match.group(0).upper(), source=source)
-        if parsed is not None:
-            return parsed
-
-    for pattern, event, key in _PATTERNS:
-        if pattern.search(line):
             return InputEvent(kind=event, source=source, key=key)
     return None
 
