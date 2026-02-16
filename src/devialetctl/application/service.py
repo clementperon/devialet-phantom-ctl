@@ -8,14 +8,18 @@ class VolumeService:
         self.gateway = gateway
         self.step = max(1, int(step))
 
+    @staticmethod
+    def _run(coro):
+        return asyncio.run(coro)
+
     def systems(self):
-        return asyncio.run(self.gateway.systems_async())
+        return self._run(self.gateway.systems_async())
 
     def get_volume(self) -> int:
-        return int(asyncio.run(self.gateway.get_volume_async()))
+        return int(self._run(self.gateway.get_volume_async()))
 
     def set_volume(self, value: int) -> None:
-        asyncio.run(self.gateway.set_volume_async(value))
+        self._run(self.gateway.set_volume_async(value))
 
     def volume_up(self) -> None:
         self._relative_step(delta=self.step, fallback=self.gateway.volume_up_async)
@@ -24,14 +28,14 @@ class VolumeService:
         self._relative_step(delta=-self.step, fallback=self.gateway.volume_down_async)
 
     def mute(self) -> None:
-        asyncio.run(self.gateway.mute_toggle_async())
+        self._run(self.gateway.mute_toggle_async())
 
     def _relative_step(self, delta: int, fallback) -> None:
         try:
-            current = int(asyncio.run(self.gateway.get_volume_async()))
+            current = int(self._run(self.gateway.get_volume_async()))
             target = max(0, min(100, current + delta))
             if target != current:
-                asyncio.run(self.gateway.set_volume_async(target))
+                self._run(self.gateway.set_volume_async(target))
         except Exception:
             # Keep compatibility if get/set is temporarily unavailable.
-            asyncio.run(fallback())
+            self._run(fallback())
