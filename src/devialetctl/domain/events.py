@@ -14,6 +14,8 @@ class InputEventType(str, Enum):
     REQUEST_ARC_TERMINATION = "request_arc_termination"
     REQUEST_SHORT_AUDIO_DESCRIPTOR = "request_short_audio_descriptor"
     SET_AUDIO_VOLUME_LEVEL = "set_audio_volume_level"
+    SAMSUNG_VENDOR_COMMAND = "samsung_vendor_command"
+    SAMSUNG_VENDOR_COMMAND_WITH_ID = "samsung_vendor_command_with_id"
 
 
 @dataclass(frozen=True)
@@ -23,3 +25,6 @@ class InputEvent:
     key: str
     value: int | None = None
     muted: bool | None = None
+    vendor_subcommand: int | None = None
+    vendor_mode: int | None = None
+    vendor_payload: tuple[int, ...] | None = None

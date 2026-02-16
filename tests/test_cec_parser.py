@@ -3,11 +3,11 @@ from devialetctl.infrastructure.cec_adapter import parse_cec_line
 
 
 def test_parse_cec_volume_up_variants() -> None:
-    event = parse_cec_line("key pressed: volume up")
+    event = parse_cec_line("USER_CONTROL_PRESSED: VOLUME_UP")
     assert event is not None
     assert event.kind == InputEventType.VOLUME_UP
 
-    event2 = parse_cec_line("USER_CONTROL_PRESSED: VOLUME_UP")
+    event2 = parse_cec_line("user_control_pressed volume up")
     assert event2 is not None
     assert event2.kind == InputEventType.VOLUME_UP
 
@@ -30,6 +30,10 @@ def test_parse_cec_ignores_non_volume_key() -> None:
 
 def test_parse_cec_ignores_key_released_human_line() -> None:
     assert parse_cec_line("key released: volume down (42) D:152ms") is None
+
+
+def test_parse_cec_ignores_key_pressed_human_line() -> None:
+    assert parse_cec_line("key pressed: volume down (42)") is None
 
 
 def test_parse_cec_hex_traffic_user_control_pressed() -> None:
@@ -82,3 +86,27 @@ def test_parse_cec_ignores_outgoing_set_audio_volume_level_echo() -> None:
 def test_parse_cec_hex_traffic_ignores_non_pressed_frames() -> None:
     assert parse_cec_line("TRAFFIC: [ 2870]\t>> 05:46") is None
     assert parse_cec_line("TRAFFIC: [ 1331]\t<< 50:47:44:65:76:69:61:6c:65:74") is None
+
+
+def test_parse_samsung_vendor_89_sync_tv_volume() -> None:
+    event = parse_cec_line("TRAFFIC: [ 2013]\t>> 05:89:95:ff")
+    assert event is not None
+    assert event.kind == InputEventType.SAMSUNG_VENDOR_COMMAND
+    assert event.vendor_subcommand == 0x95
+    assert event.vendor_payload == (0x95, 0xFF)
+
+
+def test_parse_samsung_vendor_89_mode_26() -> None:
+    event = parse_cec_line("TRAFFIC: [ 2578]\t>> 05:89:92:26:91:00:00:00")
+    assert event is not None
+    assert event.kind == InputEventType.SAMSUNG_VENDOR_COMMAND
+    assert event.vendor_subcommand == 0x92
+    assert event.vendor_mode == 0x26
+    assert event.vendor_payload == (0x92, 0x26, 0x91, 0x00, 0x00, 0x00)
+
+
+def test_parse_samsung_vendor_a0_with_id() -> None:
+    event = parse_cec_line("TRAFFIC: [ 9999]\t>> 05:A0:00:00:F0:95:FF")
+    assert event is not None
+    assert event.kind == InputEventType.SAMSUNG_VENDOR_COMMAND_WITH_ID
+    assert event.vendor_payload == (0x00, 0x00, 0xF0, 0x95, 0xFF)

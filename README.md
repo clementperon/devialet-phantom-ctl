@@ -28,7 +28,7 @@ Use cases:
 - Devialet DOS with IP control enabled
 
 For HDMI-CEC daemon mode:
-- `cec-client` available on host
+- Linux CEC framework device available (typically `/dev/cec0`)
 - CEC-capable adapter/device path (commonly Raspberry Pi HDMI or USB-CEC adapter)
 
 ## Install
@@ -78,11 +78,16 @@ uv run devialetctl daemon --input cec
 ```
 
 The daemon:
-- consumes CEC key events from `cec-client`
+- consumes CEC key events from Linux CEC (`/dev/cec0`, ioctl backend)
 - normalizes to volume actions
 - answers `GIVE_AUDIO_STATUS` (`0x71`) with `REPORT_AUDIO_STATUS` (`0x7A`)
 - answers System Audio/ARC requests (`0x70`, `0x7D`, `0xC3`, `0xC4`)
 - answers `REQUEST_SHORT_AUDIO_DESCRIPTOR` (`0xA4`) with `REPORT_SHORT_AUDIO_DESCRIPTOR` (`0xA3`)
+- announces `DEVICE_VENDOR_ID` (`0x87`) from Audio System (`5F:87:00:00:F0`) when CEC becomes ready
+- handles Samsung vendor command `0x89`:
+  - `0x95` (`SYNC_TV_VOLUME`) -> replies `50:89:95:01:XX`
+  - unknown/unsupported subcommands -> no response
+- consumes Samsung vendor command-with-id `0xA0` with no-response policy for unknown payloads
 - applies absolute volume from TV `SET_AUDIO_VOLUME_LEVEL` (`0x73`)
 - sends updated `REPORT_AUDIO_STATUS` (`0x7A`) after handled volume/mute events
 - applies dedupe/rate-limit policy
@@ -112,7 +117,10 @@ Example `config.toml`:
 
 ```toml
 log_level = "INFO"
-cec_command = "cec-client -d 8 -t a -o Devialet"
+cec_device = "/dev/cec0"
+cec_osd_name = "Devialet"
+cec_vendor_id = 240
+cec_announce_vendor_id = true
 reconnect_delay_s = 2.0
 dedupe_window_s = 0.08
 min_interval_s = 0.12
@@ -126,7 +134,7 @@ index = 0
 ```
 
 Use `log_level = "DEBUG"` (or `DEVIALETCTL_LOG_LEVEL=DEBUG`) to log raw HDMI-CEC frames:
-- `CEC RX: ...` for received lines from `cec-client`
+- `CEC RX frame: ...` for received CEC frames from `/dev/cec0`
 - `CEC TX: tx ...` for transmitted frames
 
 Environment overrides:
@@ -134,6 +142,11 @@ Environment overrides:
 - `DEVIALETCTL_PORT`
 - `DEVIALETCTL_BASE_PATH`
 - `DEVIALETCTL_LOG_LEVEL`
+- `DEVIALETCTL_CEC_DEVICE`
+
+Kernel CEC permissions note:
+- the daemon user must have read/write access to `/dev/cec0` (typically via `video` group or udev rule)
+- if startup fails with ioctl/device access errors, verify `ls -l /dev/cec*` and group membership
 
 ## Service Deployment
 

@@ -25,7 +25,10 @@ class RuntimeTarget:
 @dataclass(frozen=True)
 class DaemonConfig:
     target: RuntimeTarget
-    cec_command: str = "cec-client -d 8 -t a -o Devialet"
+    cec_device: str = "/dev/cec0"
+    cec_osd_name: str = "Devialet"
+    cec_vendor_id: int = 0x0000F0
+    cec_announce_vendor_id: bool = True
     reconnect_delay_s: float = 2.0
     log_level: str = "INFO"
     dedupe_window_s: float = 0.08
@@ -58,13 +61,17 @@ class _TargetConfigModel(BaseModel):
 
 class _DaemonConfigModel(BaseModel):
     target: _TargetConfigModel = Field(default_factory=_TargetConfigModel)
-    cec_command: str = "cec-client -d 8 -t a -o Devialet"
+    cec_device: str = "/dev/cec0"
+    cec_osd_name: str = "Devialet"
+    cec_vendor_id: int = 0x0000F0
+    cec_announce_vendor_id: bool = True
     reconnect_delay_s: float = 2.0
     log_level: str = "INFO"
     dedupe_window_s: float = 0.08
     min_interval_s: float = 0.12
 
     @field_validator(
+        "cec_vendor_id",
         "reconnect_delay_s",
         "dedupe_window_s",
         "min_interval_s",
@@ -112,6 +119,7 @@ def _merge_env_overrides(data: dict[str, Any]) -> dict[str, Any]:
     env_port = os.getenv("DEVIALETCTL_PORT")
     env_base = os.getenv("DEVIALETCTL_BASE_PATH")
     env_log_level = os.getenv("DEVIALETCTL_LOG_LEVEL")
+    env_cec_device = os.getenv("DEVIALETCTL_CEC_DEVICE")
     if env_ip is not None:
         target_data["ip"] = env_ip
     if env_port is not None:
@@ -120,6 +128,8 @@ def _merge_env_overrides(data: dict[str, Any]) -> dict[str, Any]:
         target_data["base_path"] = env_base
     if env_log_level is not None:
         merged["log_level"] = env_log_level
+    if env_cec_device is not None:
+        merged["cec_device"] = env_cec_device
 
     merged["target"] = target_data
     return merged
@@ -142,7 +152,10 @@ def load_config(path: str | None = None) -> DaemonConfig:
     )
     return DaemonConfig(
         target=target,
-        cec_command=parsed.cec_command,
+        cec_device=parsed.cec_device,
+        cec_osd_name=parsed.cec_osd_name,
+        cec_vendor_id=parsed.cec_vendor_id,
+        cec_announce_vendor_id=parsed.cec_announce_vendor_id,
         reconnect_delay_s=parsed.reconnect_delay_s,
         log_level=parsed.log_level,
         dedupe_window_s=parsed.dedupe_window_s,
