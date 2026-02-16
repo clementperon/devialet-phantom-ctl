@@ -93,6 +93,10 @@ def parse_cec_line(line: str, source: str = "cec") -> InputEvent | None:
     # TRAFFIC frames. Treating those as volume events duplicates one key press.
     if "KEY RELEASED" in upper_line:
         return None
+    # Same issue for "key pressed: volume ...": with traffic enabled this can
+    # duplicate USER_CONTROL_PRESSED frames (0x44).
+    if "KEY PRESSED:" in upper_line:
+        return None
     # libCEC traffic lines with "<<" are transmit echoes / adapter chatter.
     # Only parse inbound CEC traffic (" >> ") to avoid feedback loops.
     if "TRAFFIC:" in upper_line and ">>" not in line:
@@ -130,6 +134,28 @@ def parse_cec_line(line: str, source: str = "cec") -> InputEvent | None:
                 key="SET_AUDIO_VOLUME_LEVEL",
                 value=status & 0x7F,
                 muted=bool(status & 0x80),
+            )
+        # Samsung vendor command: <srcdst>:89:<subcommand>:...
+        if len(parts) >= 3 and parts[1] == "89":
+            payload = tuple(int(p, 16) for p in parts[2:])
+            subcommand = payload[0]
+            mode = payload[1] if subcommand == 0x92 and len(payload) >= 2 else None
+            return InputEvent(
+                kind=InputEventType.SAMSUNG_VENDOR_COMMAND,
+                source=source,
+                key="SAMSUNG_VENDOR_COMMAND",
+                vendor_subcommand=subcommand,
+                vendor_mode=mode,
+                vendor_payload=payload,
+            )
+        # Samsung vendor command with ID: <srcdst>:A0:...
+        if len(parts) >= 3 and parts[1] == "A0":
+            payload = tuple(int(p, 16) for p in parts[2:])
+            return InputEvent(
+                kind=InputEventType.SAMSUNG_VENDOR_COMMAND_WITH_ID,
+                source=source,
+                key="SAMSUNG_VENDOR_COMMAND_WITH_ID",
+                vendor_payload=payload,
             )
         # CEC system-audio / ARC requests.
         if len(parts) >= 2:

@@ -393,3 +393,184 @@ def test_daemon_runner_reuses_cached_audio_state_for_release_report(monkeypatch)
     # 1 GET from relative step (volume_up) + 1 GET for report after handled event.
     assert gw.get_volume_calls == 2
     assert gw.get_mute_calls == 1
+
+
+def test_daemon_runner_replies_samsung_vendor_95(monkeypatch) -> None:
+    class FakeGateway:
+        def systems(self):
+            return {}
+
+        def get_volume(self):
+            return 43
+
+        def get_mute_state(self):
+            return False
+
+        def set_volume(self, volume):
+            return None
+
+        def volume_up(self):
+            return None
+
+        def volume_down(self):
+            return None
+
+        def mute_toggle(self):
+            return None
+
+    from devialetctl.domain.events import InputEvent, InputEventType
+
+    sent_frames: list[str] = []
+
+    class OneShotAdapter:
+        def __init__(self, command):
+            self.command = command
+
+        def events(self):
+            yield InputEvent(
+                kind=InputEventType.SAMSUNG_VENDOR_COMMAND,
+                source="cec",
+                key="SAMSUNG_VENDOR_COMMAND",
+                vendor_subcommand=0x95,
+                vendor_payload=(0x95, 0xFF),
+            )
+            raise KeyboardInterrupt()
+
+        def send_tx(self, frame: str) -> bool:
+            sent_frames.append(frame)
+            return True
+
+    monkeypatch.setattr("devialetctl.application.daemon.CecClientAdapter", OneShotAdapter)
+    cfg = DaemonConfig(target=RuntimeTarget(ip="10.0.0.2"), min_interval_s=0.0, dedupe_window_s=0.0)
+    runner = DaemonRunner(cfg=cfg, gateway=FakeGateway())
+    try:
+        runner.run_cec_forever()
+    except KeyboardInterrupt:
+        pass
+
+    assert sent_frames == ["50:89:95:01:14"]
+
+
+def test_daemon_runner_ignores_samsung_vendor_unknown_vectors(monkeypatch) -> None:
+    class FakeGateway:
+        def systems(self):
+            return {}
+
+        def get_volume(self):
+            return 12
+
+        def get_mute_state(self):
+            return False
+
+        def set_volume(self, volume):
+            return None
+
+        def volume_up(self):
+            return None
+
+        def volume_down(self):
+            return None
+
+        def mute_toggle(self):
+            return None
+
+    from devialetctl.domain.events import InputEvent, InputEventType
+
+    sent_frames: list[str] = []
+
+    class OneShotAdapter:
+        def __init__(self, command):
+            self.command = command
+
+        def events(self):
+            yield InputEvent(
+                kind=InputEventType.SAMSUNG_VENDOR_COMMAND,
+                source="cec",
+                key="SAMSUNG_VENDOR_COMMAND",
+                vendor_subcommand=0xA2,
+                vendor_payload=(0xA2, 0xFF),
+            )
+            yield InputEvent(
+                kind=InputEventType.SAMSUNG_VENDOR_COMMAND,
+                source="cec",
+                key="SAMSUNG_VENDOR_COMMAND",
+                vendor_subcommand=0x92,
+                vendor_mode=0x26,
+                vendor_payload=(0x92, 0x26, 0x91, 0x00, 0x00, 0x00),
+            )
+            raise KeyboardInterrupt()
+
+        def send_tx(self, frame: str) -> bool:
+            sent_frames.append(frame)
+            return True
+
+    monkeypatch.setattr("devialetctl.application.daemon.CecClientAdapter", OneShotAdapter)
+    cfg = DaemonConfig(target=RuntimeTarget(ip="10.0.0.2"), min_interval_s=0.0, dedupe_window_s=0.0)
+    runner = DaemonRunner(cfg=cfg, gateway=FakeGateway())
+    try:
+        runner.run_cec_forever()
+    except KeyboardInterrupt:
+        pass
+
+    assert sent_frames == []
+
+
+def test_daemon_runner_applies_samsung_vendor_96_volume(monkeypatch) -> None:
+    class FakeGateway:
+        def __init__(self):
+            self.calls = []
+
+        def systems(self):
+            return {}
+
+        def get_volume(self):
+            return 12
+
+        def get_mute_state(self):
+            return False
+
+        def set_volume(self, volume):
+            self.calls.append(("set", volume))
+
+        def volume_up(self):
+            return None
+
+        def volume_down(self):
+            return None
+
+        def mute_toggle(self):
+            return None
+
+    from devialetctl.domain.events import InputEvent, InputEventType
+
+    sent_frames: list[str] = []
+
+    class OneShotAdapter:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def events(self):
+            yield InputEvent(
+                kind=InputEventType.SAMSUNG_VENDOR_COMMAND,
+                source="cec",
+                key="SAMSUNG_VENDOR_COMMAND",
+                vendor_subcommand=0x96,
+                vendor_payload=(0x96, 0x2B),
+            )
+            raise KeyboardInterrupt()
+
+        def send_tx(self, frame: str) -> bool:
+            sent_frames.append(frame)
+            return True
+
+    monkeypatch.setattr("devialetctl.application.daemon.CecKernelAdapter", OneShotAdapter)
+    cfg = DaemonConfig(target=RuntimeTarget(ip="10.0.0.2"), min_interval_s=0.0, dedupe_window_s=0.0)
+    gw = FakeGateway()
+    runner = DaemonRunner(cfg=cfg, gateway=gw)
+    try:
+        runner.run_cec_forever()
+    except KeyboardInterrupt:
+        pass
+
+    assert gw.calls == [("set", 43)]
+    assert sent_frames == []
