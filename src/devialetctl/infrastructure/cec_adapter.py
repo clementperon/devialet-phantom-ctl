@@ -1,3 +1,4 @@
+import asyncio
 import ctypes
 import errno
 import fcntl
@@ -6,7 +7,7 @@ import os
 import select
 import time
 from dataclasses import dataclass
-from typing import Iterator
+from typing import AsyncIterator, Iterator
 
 from devialetctl.domain.events import InputEvent, InputEventType
 
@@ -247,6 +248,7 @@ class CecKernelAdapter:
     source: str = "cec"
     _fd: int | None = None
     _log_addrs_busy_retries: tuple[float, ...] = (0.1, 0.25, 0.5)
+    _async_poll_interval_s: float = 0.05
 
     @staticmethod
     def _has_audio_system_claim(addrs: CecLogAddrs) -> bool:
@@ -355,6 +357,40 @@ class CecKernelAdapter:
                 event = parse_cec_frame(frame, source=self.source)
                 if event is not None:
                     yield event
+        finally:
+            self._fd = None
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+
+    async def async_events(self) -> AsyncIterator[InputEvent]:
+        LOG.info("starting kernel cec adapter (async): %s", self.device)
+        fd = os.open(self.device, os.O_RDWR | os.O_NONBLOCK)
+        self._fd = fd
+
+        try:
+            self._configure(fd)
+            if self.announce_vendor_id:
+                self.send_tx(_DISCOVERY_VENDOR_FRAME)
+
+            while True:
+                try:
+                    frame = self._receive_one_frame(fd)
+                except OSError as exc:
+                    if exc.errno in {errno.EAGAIN, errno.EWOULDBLOCK, errno.EINTR}:
+                        await asyncio.sleep(self._async_poll_interval_s)
+                        continue
+                    raise
+                if not frame:
+                    await asyncio.sleep(self._async_poll_interval_s)
+                    continue
+                LOG.debug("CEC RX frame: %s", frame)
+                LOG.debug("CEC RX decoded: %s -> %s", frame, format_cec_frame_human(frame))
+                event = parse_cec_frame(frame, source=self.source)
+                if event is not None:
+                    yield event
+                await asyncio.sleep(0)
         finally:
             self._fd = None
             try:

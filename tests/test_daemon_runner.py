@@ -1,3 +1,5 @@
+import asyncio
+
 from devialetctl.application.daemon import DaemonRunner
 from devialetctl.infrastructure.config import DaemonConfig, RuntimeTarget
 
@@ -574,3 +576,64 @@ def test_daemon_runner_applies_samsung_vendor_96_volume(monkeypatch) -> None:
 
     assert gw.calls == [("set", 43)]
     assert sent_frames == []
+
+
+def test_external_watcher_updates_cache_and_notifies_tv() -> None:
+    class FakeGateway:
+        def __init__(self):
+            self.current_volume = 10
+            self.current_muted = False
+
+        def systems(self):
+            return {}
+
+        def get_volume(self):
+            return self.current_volume
+
+        def get_mute_state(self):
+            return self.current_muted
+
+        def set_volume(self, volume):
+            self.current_volume = volume
+
+        def volume_up(self):
+            return None
+
+        def volume_down(self):
+            return None
+
+        def mute_toggle(self):
+            self.current_muted = not self.current_muted
+
+    class FakeAdapter:
+        def __init__(self):
+            self.sent_frames: list[str] = []
+
+        def send_tx(self, frame: str) -> bool:
+            self.sent_frames.append(frame)
+            return True
+
+    cfg = DaemonConfig(target=RuntimeTarget(ip="10.0.0.2"), min_interval_s=0.0, dedupe_window_s=0.0)
+    gw = FakeGateway()
+    runner = DaemonRunner(cfg=cfg, gateway=gw)
+    runner._external_watch_interval_s = 0.01
+    runner._cached_volume = 10
+    runner._cached_muted = False
+    adapter = FakeAdapter()
+
+    async def _run_watcher() -> None:
+        stop = asyncio.Event()
+        task = asyncio.create_task(runner._watch_external_audio_state_async(adapter, stop))
+        try:
+            await asyncio.sleep(0.03)
+            gw.current_volume = 20
+            await asyncio.sleep(0.05)
+        finally:
+            stop.set()
+            await task
+
+    asyncio.run(_run_watcher())
+
+    assert runner._cached_volume == 20
+    assert runner._cached_muted is False
+    assert adapter.sent_frames == ["50:7A:14"]

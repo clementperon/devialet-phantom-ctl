@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 
@@ -27,6 +28,7 @@ class DaemonRunner:
     def __init__(self, cfg: DaemonConfig, gateway: DevialetHttpGateway) -> None:
         self.cfg = cfg
         self.gateway = gateway
+        self._external_watch_interval_s = 0.5
         self._cached_volume: int | None = None
         self._cached_muted: bool | None = None
         self._vendor_state_byte: int = 0x14
@@ -67,26 +69,10 @@ class DaemonRunner:
                     vendor_id=self.cfg.cec_vendor_id,
                     announce_vendor_id=self.cfg.cec_announce_vendor_id,
                 )
-                for event in adapter.events():
-                    if self._handle_cec_system_request(adapter, event.kind):
-                        continue
-                    if event.kind == InputEventType.SAMSUNG_VENDOR_COMMAND:
-                        self._handle_samsung_vendor_command(adapter, event)
-                        continue
-                    if event.kind == InputEventType.SAMSUNG_VENDOR_COMMAND_WITH_ID:
-                        self._handle_samsung_vendor_command_with_id(event)
-                        continue
-                    if event.kind == InputEventType.SET_AUDIO_VOLUME_LEVEL:
-                        self._handle_set_audio_volume_level(adapter, event)
-                        continue
-                    if event.kind == InputEventType.GIVE_AUDIO_STATUS:
-                        self._report_audio_status(adapter)
-                        continue
-                    handled = self.router.handle(event)
-                    if handled:
-                        self._update_cache_after_relative_event(event.kind)
-                        LOG.debug("handled event=%s key=%s", event.kind.value, event.key)
-                        self._report_audio_status(adapter)
+                if hasattr(adapter, "async_events"):
+                    asyncio.run(self._run_cec_async(adapter))
+                else:
+                    self._run_cec_sync(adapter)
                 backoff_s = self.cfg.reconnect_delay_s
             except KeyboardInterrupt:
                 raise
@@ -95,13 +81,46 @@ class DaemonRunner:
                 time.sleep(backoff_s)
                 backoff_s = min(max_backoff_s, backoff_s * 2.0)
 
+    async def _run_cec_async(self, adapter: CecKernelAdapter) -> None:
+        stop_event = asyncio.Event()
+        watcher = asyncio.create_task(self._watch_external_audio_state_async(adapter, stop_event))
+        try:
+            async for event in adapter.async_events():
+                self._handle_cec_event(adapter, event)
+        finally:
+            stop_event.set()
+            await watcher
+
+    def _run_cec_sync(self, adapter: CecKernelAdapter) -> None:
+        for event in adapter.events():
+            self._handle_cec_event(adapter, event)
+
+    def _handle_cec_event(self, adapter: CecKernelAdapter, event: InputEvent) -> None:
+        if self._handle_cec_system_request(adapter, event.kind):
+            return
+        if event.kind == InputEventType.SAMSUNG_VENDOR_COMMAND:
+            self._handle_samsung_vendor_command(adapter, event)
+            return
+        if event.kind == InputEventType.SAMSUNG_VENDOR_COMMAND_WITH_ID:
+            self._handle_samsung_vendor_command_with_id(event)
+            return
+        if event.kind == InputEventType.SET_AUDIO_VOLUME_LEVEL:
+            self._handle_set_audio_volume_level(adapter, event)
+            return
+        if event.kind == InputEventType.GIVE_AUDIO_STATUS:
+            self._report_audio_status(adapter)
+            return
+        handled = self.router.handle(event)
+        if handled:
+            self._update_cache_after_relative_event(event.kind)
+            LOG.debug("handled event=%s key=%s", event.kind.value, event.key)
+            self._report_audio_status(adapter)
+
     def _handle_cec_system_request(self, adapter: CecKernelAdapter, kind: InputEventType) -> bool:
         frame = _CEC_SYSTEM_RESPONSE_MAP.get(kind)
         if frame is None:
             return False
-        if not hasattr(adapter, "send_tx"):
-            return True
-        sent = adapter.send_tx(frame)
+        sent = self._send_tx(adapter, frame)
         if sent:
             LOG.debug("sent CEC system/ARC response frame: %s", frame)
         else:
@@ -109,15 +128,15 @@ class DaemonRunner:
         return True
 
     def _report_audio_status(self, adapter: CecKernelAdapter) -> None:
-        if not hasattr(adapter, "send_tx"):
-            return
         try:
             volume, muted = self._get_audio_state()
-            status = (0x80 if muted else 0x00) | (volume & 0x7F)
-            frame = f"50:7A:{status:02X}"
-            sent = adapter.send_tx(frame)
+            sent = self._report_audio_status_for_state(adapter, volume, muted)
             if sent:
-                LOG.debug("sent CEC audio status frame: %s", frame)
+                LOG.debug(
+                    "sent CEC audio status frame for cached state volume=%d muted=%s",
+                    volume,
+                    muted,
+                )
             else:
                 LOG.debug("cannot send CEC audio status; adapter not writable")
         except Exception as exc:
@@ -162,8 +181,9 @@ class DaemonRunner:
             # Samsung SYNC_TV_VOLUME request: reply with current vendor state byte.
             if self._cached_volume is not None:
                 self._sync_vendor_state_from_volume(self._cached_volume)
-            frame = f"50:89:95:01:{self._vendor_state_byte:02X}"
-            sent = adapter.send_tx(frame) if hasattr(adapter, "send_tx") else False
+            state = self._vendor_state_byte
+            frame = f"50:89:95:01:{state:02X}"
+            sent = self._send_tx(adapter, frame)
             if sent:
                 LOG.debug("sent Samsung vendor sync response frame: %s", frame)
             else:
@@ -200,12 +220,16 @@ class DaemonRunner:
         LOG.debug("ignored Samsung vendor command-with-id payload=%s", event.vendor_payload)
 
     def _get_audio_state(self) -> tuple[int, bool]:
-        if self._cached_volume is None:
-            self._cached_volume = max(0, min(100, int(self.gateway.get_volume())))
-            self._sync_vendor_state_from_volume(self._cached_volume)
-        if self._cached_muted is None:
-            self._cached_muted = bool(getattr(self.gateway, "get_mute_state", lambda: False)())
-        return self._cached_volume, self._cached_muted
+        cached_volume = self._cached_volume
+        cached_muted = self._cached_muted
+        if cached_volume is None:
+            cached_volume = max(0, min(100, int(self.gateway.get_volume())))
+            self._cached_volume = cached_volume
+            self._sync_vendor_state_from_volume(cached_volume)
+        if cached_muted is None:
+            cached_muted = bool(getattr(self.gateway, "get_mute_state", lambda: False)())
+            self._cached_muted = cached_muted
+        return cached_volume, cached_muted
 
     def _update_cache_after_relative_event(self, kind: InputEventType) -> None:
         if kind == InputEventType.VOLUME_UP and self._cached_volume is not None:
@@ -221,3 +245,58 @@ class DaemonRunner:
 
     def _sync_vendor_state_from_volume(self, volume: int) -> None:
         self._vendor_state_byte = max(0, min(100, int(volume)))
+
+    def _send_tx(self, adapter: CecKernelAdapter, frame: str) -> bool:
+        if not hasattr(adapter, "send_tx"):
+            return False
+        return bool(adapter.send_tx(frame))
+
+    def _report_audio_status_for_state(
+        self,
+        adapter: CecKernelAdapter,
+        volume: int,
+        muted: bool,
+    ) -> bool:
+        status = (0x80 if muted else 0x00) | (volume & 0x7F)
+        frame = f"50:7A:{status:02X}"
+        return self._send_tx(adapter, frame)
+
+    async def _watch_external_audio_state_async(
+        self,
+        adapter: CecKernelAdapter,
+        stop_event: asyncio.Event,
+    ) -> None:
+        while not stop_event.is_set():
+            await asyncio.sleep(self._external_watch_interval_s)
+            if stop_event.is_set():
+                return
+            changed, volume, muted = self._poll_external_audio_state_once()
+            if changed:
+                sent = self._report_audio_status_for_state(adapter, volume, muted)
+                if sent:
+                    LOG.debug(
+                        "external audio-state changed; notified TV volume=%d muted=%s",
+                        volume,
+                        muted,
+                    )
+
+    def _poll_external_audio_state_once(self) -> tuple[bool, int, bool]:
+        try:
+            volume = max(0, min(100, int(self.gateway.get_volume())))
+            muted = bool(getattr(self.gateway, "get_mute_state", lambda: False)())
+        except Exception as exc:
+            LOG.debug("external audio-state polling failed: %s", exc)
+            return False, 0, False
+
+        if self._cached_volume is None or self._cached_muted is None:
+            self._cached_volume = volume
+            self._cached_muted = muted
+            self._sync_vendor_state_from_volume(volume)
+            return False, volume, muted
+
+        changed = volume != self._cached_volume or muted != self._cached_muted
+        if changed:
+            self._cached_volume = volume
+            self._cached_muted = muted
+            self._sync_vendor_state_from_volume(volume)
+        return changed, volume, muted
