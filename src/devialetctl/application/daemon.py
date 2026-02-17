@@ -13,6 +13,9 @@ from devialetctl.infrastructure.keyboard_adapter import KeyboardAdapter
 
 LOG = logging.getLogger(__name__)
 _SAMSUNG_VENDOR_92_SUPPORTED_MODES = {0x01, 0x03, 0x04, 0x05, 0x06}
+_VENDOR_COMPAT_VENDOR_ID: dict[str, int] = {
+    "samsung": 0x0000F0,
+}
 _CEC_SYSTEM_RESPONSE_MAP: dict[InputEventType, str] = {
     InputEventType.SYSTEM_AUDIO_MODE_REQUEST: "50:72:01",
     InputEventType.GIVE_SYSTEM_AUDIO_MODE_STATUS: "50:7E:01",
@@ -69,8 +72,9 @@ class DaemonRunner:
                 adapter = CecKernelAdapter(
                     device=self.cfg.cec_device,
                     osd_name=self.cfg.cec_osd_name,
-                    vendor_id=self.cfg.cec_vendor_id,
-                    announce_vendor_id=self.cfg.cec_announce_vendor_id,
+                    vendor_id=self._vendor_id_for_profile(),
+                    announce_vendor_id=self._should_spoof_vendor_id(),
+                    spoof_vendor_id=self._should_spoof_vendor_id(),
                 )
                 asyncio.run(self._run_cec_async(adapter))
                 backoff_s = self.cfg.reconnect_delay_s
@@ -101,10 +105,16 @@ class DaemonRunner:
             if self._handle_cec_system_request(adapter, event.kind):
                 return
             if event.kind == InputEventType.SAMSUNG_VENDOR_COMMAND:
-                await self._handle_samsung_vendor_command_async(adapter, event)
+                if self._is_samsung_vendor_compat_enabled():
+                    await self._handle_samsung_vendor_command_async(adapter, event)
+                else:
+                    LOG.debug("ignored Samsung vendor command (compat disabled)")
                 return
             if event.kind == InputEventType.SAMSUNG_VENDOR_COMMAND_WITH_ID:
-                self._handle_samsung_vendor_command_with_id(event)
+                if self._is_samsung_vendor_compat_enabled():
+                    self._handle_samsung_vendor_command_with_id(event)
+                else:
+                    LOG.debug("ignored Samsung vendor command-with-id (compat disabled)")
                 return
             if event.kind == InputEventType.SET_AUDIO_VOLUME_LEVEL:
                 await self._handle_set_audio_volume_level_async(adapter, event)
@@ -334,6 +344,16 @@ class DaemonRunner:
         if self._io_lock is None:
             raise RuntimeError("I/O lock is not initialized")
         return self._io_lock
+
+    def _is_samsung_vendor_compat_enabled(self) -> bool:
+        return self.cfg.cec_vendor_compat == "samsung"
+
+    def _should_spoof_vendor_id(self) -> bool:
+        # For now only Samsung vendor profile needs vendor-id spoofing.
+        return self._is_samsung_vendor_compat_enabled()
+
+    def _vendor_id_for_profile(self) -> int:
+        return _VENDOR_COMPAT_VENDOR_ID.get(self.cfg.cec_vendor_compat, 0)
 
     async def _relative_step_async(self, delta: int, fallback) -> None:
         try:

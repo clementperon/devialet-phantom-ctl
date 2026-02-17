@@ -11,7 +11,6 @@ from typing import AsyncIterator
 from devialetctl.domain.events import InputEvent, InputEventType
 
 LOG = logging.getLogger(__name__)
-_DISCOVERY_VENDOR_FRAME = "5F:87:00:00:F0"
 
 # Linux CEC UAPI constants (include/uapi/linux/cec.h)
 CEC_MAX_MSG_SIZE = 16
@@ -243,11 +242,16 @@ class CecKernelAdapter:
     device: str = "/dev/cec0"
     osd_name: str = "Devialet"
     vendor_id: int = 0x0000F0
-    announce_vendor_id: bool = True
+    announce_vendor_id: bool = False
+    spoof_vendor_id: bool = False
     source: str = "cec"
     _fd: int | None = None
     _log_addrs_busy_retries: tuple[float, ...] = (0.1, 0.25, 0.5)
     _async_poll_interval_s: float = 0.05
+
+    def _vendor_announce_frame(self) -> str:
+        vid = int(self.vendor_id) & 0xFFFFFF
+        return f"5F:87:{(vid >> 16) & 0xFF:02X}:{(vid >> 8) & 0xFF:02X}:{vid & 0xFF:02X}"
 
     @staticmethod
     def _has_audio_system_claim(addrs: CecLogAddrs) -> bool:
@@ -270,7 +274,11 @@ class CecKernelAdapter:
         addrs = CecLogAddrs()
         addrs.num_log_addrs = 1
         addrs.cec_version = CEC_OP_CEC_VERSION_1_4
-        addrs.vendor_id = int(self.vendor_id) & 0xFFFFFF
+        if self.spoof_vendor_id:
+            addrs.vendor_id = int(self.vendor_id) & 0xFFFFFF
+        else:
+            # Preserve current adapter vendor identity unless explicitly spoofing.
+            addrs.vendor_id = int(current.vendor_id) & 0xFFFFFF
         encoded_name = self.osd_name.encode("ascii", errors="ignore")[:14]
         addrs.osd_name = encoded_name
         addrs.primary_device_type[0] = CEC_OP_PRIM_DEVTYPE_AUDIOSYSTEM
@@ -336,8 +344,8 @@ class CecKernelAdapter:
 
         try:
             self._configure(fd)
-            if self.announce_vendor_id:
-                self.send_tx(_DISCOVERY_VENDOR_FRAME)
+            if self.announce_vendor_id and self.spoof_vendor_id:
+                self.send_tx(self._vendor_announce_frame())
 
             while True:
                 try:

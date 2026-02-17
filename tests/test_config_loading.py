@@ -58,8 +58,7 @@ def test_load_config_uses_kernel_cec_defaults(tmp_path) -> None:
     cfg = load_config(str(cfg_file))
     assert cfg.cec_device == "/dev/cec0"
     assert cfg.cec_osd_name == "Devialet"
-    assert cfg.cec_vendor_id == 0x0000F0
-    assert cfg.cec_announce_vendor_id is True
+    assert cfg.cec_vendor_compat == "none"
 
 
 def test_load_config_env_overrides_cec_device(monkeypatch, tmp_path) -> None:
@@ -68,3 +67,11 @@ def test_load_config_env_overrides_cec_device(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("DEVIALETCTL_CEC_DEVICE", "/dev/cec1")
     cfg = load_config(str(cfg_file))
     assert cfg.cec_device == "/dev/cec1"
+
+
+def test_load_config_env_overrides_vendor_compat(monkeypatch, tmp_path) -> None:
+    cfg_file = tmp_path / "config.toml"
+    cfg_file.write_text("", encoding="utf-8")
+    monkeypatch.setenv("DEVIALETCTL_CEC_VENDOR_COMPAT", "samsung")
+    cfg = load_config(str(cfg_file))
+    assert cfg.cec_vendor_compat == "samsung"

@@ -83,11 +83,12 @@ The daemon:
 - answers `GIVE_AUDIO_STATUS` (`0x71`) with `REPORT_AUDIO_STATUS` (`0x7A`)
 - answers System Audio/ARC requests (`0x70`, `0x7D`, `0xC3`, `0xC4`)
 - answers `REQUEST_SHORT_AUDIO_DESCRIPTOR` (`0xA4`) with `REPORT_SHORT_AUDIO_DESCRIPTOR` (`0xA3`)
-- announces `DEVICE_VENDOR_ID` (`0x87`) from Audio System (`5F:87:00:00:F0`) when CEC becomes ready
-- handles Samsung vendor command `0x89`:
+- by default, keeps standard CEC behavior (no vendor spoofing)
+- optionally announces `DEVICE_VENDOR_ID` (`0x87`) from Audio System when vendor compat requires spoofing
+- with `cec_vendor_compat = "samsung"`, handles Samsung vendor command `0x89`:
   - `0x95` (`SYNC_TV_VOLUME`) -> replies `50:89:95:01:XX`
   - unknown/unsupported subcommands -> no response
-- consumes Samsung vendor command-with-id `0xA0` with no-response policy for unknown payloads
+- with `cec_vendor_compat = "samsung"`, consumes Samsung vendor command-with-id `0xA0` with no-response policy for unknown payloads
 - applies absolute volume from TV `SET_AUDIO_VOLUME_LEVEL` (`0x73`)
 - sends updated `REPORT_AUDIO_STATUS` (`0x7A`) after handled volume/mute events
 - applies dedupe/rate-limit policy
@@ -119,8 +120,7 @@ Example `config.toml`:
 log_level = "INFO"
 cec_device = "/dev/cec0"
 cec_osd_name = "Devialet"
-cec_vendor_id = 240
-cec_announce_vendor_id = true
+cec_vendor_compat = "none"
 reconnect_delay_s = 2.0
 dedupe_window_s = 0.08
 min_interval_s = 0.12

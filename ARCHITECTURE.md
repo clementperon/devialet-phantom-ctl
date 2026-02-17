@@ -143,7 +143,7 @@ sequenceDiagram
   D->>D: suspend watcher window
   D->>D: acquire io_lock
   D->>API: POST/GET for command handling
-  D->>TV: TX REPORT_AUDIO_STATUS / vendor response
+  D->>TV: TX REPORT_AUDIO_STATUS (and optional vendor response)
   D->>D: release io_lock
 
   W->>D: next tick during suspend
@@ -160,7 +160,7 @@ Config source priority:
 
 Relevant settings:
 - target: `ip`, `port`, `base_path`, `discover_timeout`, `index`
-- daemon: `cec_device`, `cec_osd_name`, `cec_vendor_id`, `cec_announce_vendor_id`, `reconnect_delay_s`, `log_level`
+- daemon: `cec_device`, `cec_osd_name`, `cec_vendor_compat`, `reconnect_delay_s`, `log_level`
 - policy: `dedupe_window_s`, `min_interval_s`
 
 ## Compatibility Guarantees

@@ -121,11 +121,10 @@ def main() -> None:
     daemon.add_argument("--base-path", dest="daemon_base_path", type=str, default=None)
     daemon.add_argument("--cec-device", dest="daemon_cec_device", type=str, default=None)
     daemon.add_argument("--cec-osd-name", dest="daemon_cec_osd_name", type=str, default=None)
-    daemon.add_argument("--cec-vendor-id", dest="daemon_cec_vendor_id", type=int, default=None)
     daemon.add_argument(
-        "--no-cec-vendor-announce",
-        dest="daemon_cec_announce_vendor_id",
-        action="store_false",
+        "--cec-vendor-compat",
+        dest="daemon_cec_vendor_compat",
+        choices=["none", "samsung"],
         default=None,
     )
 
@@ -152,15 +151,10 @@ def main() -> None:
                     if args.daemon_cec_osd_name is not None
                     else cfg.cec_osd_name
                 ),
-                cec_vendor_id=(
-                    args.daemon_cec_vendor_id
-                    if args.daemon_cec_vendor_id is not None
-                    else cfg.cec_vendor_id
-                ),
-                cec_announce_vendor_id=(
-                    args.daemon_cec_announce_vendor_id
-                    if args.daemon_cec_announce_vendor_id is not None
-                    else cfg.cec_announce_vendor_id
+                cec_vendor_compat=(
+                    args.daemon_cec_vendor_compat
+                    if args.daemon_cec_vendor_compat is not None
+                    else cfg.cec_vendor_compat
                 ),
             )
             _configure_logging(cfg.log_level)
