@@ -1,8 +1,18 @@
+import json
 import sys
 
 import pytest
 
 from devialetctl.interfaces import cli
+
+
+@pytest.fixture(autouse=True)
+def _disable_real_upnp_discovery(monkeypatch) -> None:
+    class FakeUpnpDiscovery:
+        def discover(self, timeout_s):
+            return []
+
+    monkeypatch.setattr(cli, "UpnpDiscoveryGateway", lambda: FakeUpnpDiscovery())
 
 
 def test_cli_list_prints_discovered_services(monkeypatch, capsys) -> None:
@@ -184,6 +194,91 @@ def test_cli_daemon_handles_runtime_error(monkeypatch, capsys) -> None:
     assert exc.value.code == 2
     err = capsys.readouterr().err
     assert "Daemon error: boom" in err
+
+
+def test_cli_tree_prints_groups_systems_devices(monkeypatch, capsys) -> None:
+    class FakeDiscovery:
+        def discover(self, timeout_s):
+            class Row:
+                name = "phantom"
+                address = "10.0.0.2"
+                port = 80
+                base_path = "/ipcontrol/v1"
+
+            return [Row()]
+
+    class FakeGateway:
+        def __init__(self, address, port, base_path):
+            self.address = address
+            self.port = port
+            self.base_path = base_path
+
+        async def fetch_json_async(self, path):
+            if path == "/devices/current":
+                return {
+                    "deviceId": "dev-1",
+                    "systemId": "sys-1",
+                    "groupId": "grp-1",
+                    "deviceName": "Living Room",
+                    "model": "Phantom I",
+                    "role": "Mono",
+                }
+            if path == "/systems/current":
+                return {"systemId": "sys-1", "groupId": "grp-1", "systemName": "Salon"}
+            return {}
+
+    monkeypatch.setattr(cli, "MdnsDiscoveryGateway", lambda: FakeDiscovery())
+    monkeypatch.setattr(cli, "DevialetHttpGateway", FakeGateway)
+    monkeypatch.setattr(sys, "argv", ["devialetctl", "tree"])
+    cli.main()
+
+    out = capsys.readouterr().out
+    assert "Group grp-1" in out
+    assert "System Salon (sys-1)" in out
+    assert "Device Living Room @ 10.0.0.2 model=Phantom I role=Mono" in out
+
+
+def test_cli_tree_json_outputs_structured_topology(monkeypatch, capsys) -> None:
+    class FakeDiscovery:
+        def discover(self, timeout_s):
+            class Row:
+                name = "phantom"
+                address = "10.0.0.2"
+                port = 80
+                base_path = "/ipcontrol/v1"
+
+            return [Row()]
+
+    class FakeGateway:
+        def __init__(self, address, port, base_path):
+            self.address = address
+            self.port = port
+            self.base_path = base_path
+
+        async def fetch_json_async(self, path):
+            if path == "/devices/current":
+                return {
+                    "deviceId": "dev-1",
+                    "systemId": "sys-1",
+                    "groupId": "grp-1",
+                    "deviceName": "Living Room",
+                    "model": "Phantom I",
+                    "role": "Mono",
+                }
+            if path == "/systems/current":
+                return {"systemId": "sys-1", "groupId": "grp-1", "systemName": "Salon"}
+            return {}
+
+    monkeypatch.setattr(cli, "MdnsDiscoveryGateway", lambda: FakeDiscovery())
+    monkeypatch.setattr(cli, "DevialetHttpGateway", FakeGateway)
+    monkeypatch.setattr(sys, "argv", ["devialetctl", "tree", "--json"])
+    cli.main()
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["groups"][0]["group_id"] == "grp-1"
+    assert data["groups"][0]["systems"][0]["system_name"] == "Salon"
+    assert data["groups"][0]["systems"][0]["devices"][0]["device_name"] == "Living Room"
+    assert "sources" not in data["groups"][0]
 
 
 def test_cli_list_applies_log_level_from_env(monkeypatch, capsys) -> None:

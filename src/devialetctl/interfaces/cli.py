@@ -1,5 +1,7 @@
 import argparse
+import asyncio
 import dataclasses
+import json
 import logging
 import os
 import sys
@@ -11,6 +13,8 @@ from devialetctl.infrastructure.config import load_config
 from devialetctl.infrastructure.devialet_gateway import DevialetHttpGateway, normalize_base_path
 from devialetctl.infrastructure.mdns_gateway import MdnsDiscoveryGateway
 from devialetctl.infrastructure.upnp_gateway import UpnpDiscoveryGateway
+
+LOG = logging.getLogger(__name__)
 
 
 def _pick(services: list[Target], index: int | None):
@@ -40,6 +44,147 @@ def _discover_targets(timeout_s: float) -> list[Target]:
             seen.add(key)
             merged.append(svc)
     return merged
+
+
+def _safe_fetch_json(gateway: DevialetHttpGateway, path: str) -> dict | None:
+    try:
+        data = asyncio.run(gateway.fetch_json_async(path))
+        if isinstance(data, dict):
+            return data
+    except Exception as exc:
+        LOG.debug("tree fetch failed path=%s host=%s err=%s", path, gateway.address, exc)
+    return None
+
+
+def _build_topology_tree(targets: list[Target]) -> dict:
+    devices_by_id: dict[str, dict] = {}
+    systems: dict[str, dict] = {}
+    groups: dict[str, dict] = {}
+
+    for target in targets:
+        gateway = DevialetHttpGateway(target.address, target.port, target.base_path)
+        device = _safe_fetch_json(gateway, "/devices/current")
+        if not device:
+            continue
+
+        device_id = str(device.get("deviceId") or f"dispatcher:{target.address}")
+        system_id = str(device.get("systemId") or "") or None
+        group_id = str(device.get("groupId") or "") or None
+        devices_by_id[device_id] = {
+            "device_id": device_id,
+            "device_name": device.get("deviceName") or device.get("model") or device_id,
+            "model": str(device.get("model") or ""),
+            "role": str(device.get("role") or ""),
+            "serial": str(device.get("serial") or ""),
+            "system_id": system_id,
+            "group_id": group_id,
+            "address": target.address,
+            "port": target.port,
+        }
+
+    if not devices_by_id:
+        return {"groups": [], "ungrouped_devices": [], "errors": ["No Devialet devices detected."]}
+
+    for dev in devices_by_id.values():
+        if not dev["system_id"]:
+            continue
+        systems.setdefault(
+            dev["system_id"],
+            {"name": None, "group_id": dev["group_id"], "devices": []},
+        )
+        systems[dev["system_id"]]["devices"].append(dev)
+
+    for system_id, system_data in systems.items():
+        probe_device = system_data["devices"][0]
+        gateway = DevialetHttpGateway(
+            probe_device["address"],
+            probe_device["port"],
+            "/ipcontrol/v1",
+        )
+        sys_info = _safe_fetch_json(gateway, "/systems/current")
+        if sys_info:
+            system_data["name"] = str(sys_info.get("systemName") or system_id)
+            sys_group_id = str(sys_info.get("groupId") or "") or None
+            if sys_group_id:
+                system_data["group_id"] = sys_group_id
+        else:
+            system_data["name"] = system_id
+
+        group_id = system_data["group_id"] or "ungrouped"
+        groups.setdefault(group_id, {"systems": {}})
+        groups[group_id]["systems"][system_id] = system_data
+
+    group_items: list[dict] = []
+    for group_id in sorted(groups.keys()):
+        group_data = groups[group_id]
+        systems_items: list[dict] = []
+        for system_id in sorted(group_data["systems"].keys()):
+            system_data = group_data["systems"][system_id]
+            devices_items = [
+                {
+                    "device_id": dev["device_id"],
+                    "device_name": dev["device_name"],
+                    "model": dev["model"],
+                    "role": dev["role"],
+                    "serial": dev["serial"],
+                    "address": dev["address"],
+                    "port": dev["port"],
+                }
+                for dev in sorted(system_data["devices"], key=lambda d: d["device_name"])
+            ]
+            systems_items.append(
+                {
+                    "system_id": system_id,
+                    "system_name": system_data["name"],
+                    "devices": devices_items,
+                }
+            )
+        group_items.append(
+            {
+                "group_id": group_id,
+                "systems": systems_items,
+            }
+        )
+
+    ungrouped_devices = [
+        {
+            "device_id": dev["device_id"],
+            "device_name": dev["device_name"],
+            "model": dev["model"],
+            "role": dev["role"],
+            "serial": dev["serial"],
+            "address": dev["address"],
+            "port": dev["port"],
+        }
+        for dev in sorted(
+            [d for d in devices_by_id.values() if d["system_id"] is None],
+            key=lambda d: d["device_name"],
+        )
+    ]
+
+    return {"groups": group_items, "ungrouped_devices": ungrouped_devices, "errors": []}
+
+
+def _render_topology_tree_lines(tree: dict) -> list[str]:
+    if tree.get("errors"):
+        return tree["errors"]
+
+    lines: list[str] = []
+    for group in tree.get("groups", []):
+        lines.append(f"Group {group['group_id']}")
+        for system in group.get("systems", []):
+            lines.append(f"  System {system['system_name']} ({system['system_id']})")
+            for dev in system.get("devices", []):
+                role = f" role={dev['role']}" if dev.get("role") else ""
+                model = f" model={dev['model']}" if dev.get("model") else ""
+                lines.append(f"    Device {dev['device_name']} @ {dev['address']}{model}{role}")
+
+    if tree.get("ungrouped_devices"):
+        lines.append("Ungrouped devices")
+        for dev in tree["ungrouped_devices"]:
+            model = f" model={dev['model']}" if dev.get("model") else ""
+            lines.append(f"  Device {dev['device_name']} @ {dev['address']}{model}")
+    return lines
 
 
 def _target_from_args(args) -> Target:
@@ -123,6 +268,8 @@ def main() -> None:
 
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("list")
+    tree = sub.add_parser("tree")
+    tree.add_argument("--json", action="store_true", dest="tree_json")
     sub.add_parser("systems")
     sub.add_parser("getvol")
     sub.add_parser("volup")
@@ -162,6 +309,18 @@ def main() -> None:
             return
         for i, s in enumerate(services):
             print(f"[{i}] {s.name} -> {s.address}:{s.port}{s.base_path}")
+        return
+    if args.cmd == "tree":
+        services = _discover_targets(timeout_s=args.discover_timeout)
+        if not services:
+            print("No service detected.")
+            return
+        tree = _build_topology_tree(services)
+        if args.tree_json:
+            print(json.dumps(tree, indent=2, ensure_ascii=False))
+            return
+        for line in _render_topology_tree_lines(tree):
+            print(line)
         return
 
     if args.cmd == "daemon":

@@ -40,6 +40,9 @@ class DevialetHttpGateway(VolumeGateway):
             )
         r.raise_for_status()
 
+    async def fetch_json_async(self, path: str) -> dict[str, Any]:
+        return await self._aget(path)
+
     async def systems_async(self) -> dict[str, Any]:
         try:
             return await self._aget("/systems")
