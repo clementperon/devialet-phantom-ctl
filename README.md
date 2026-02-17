@@ -94,6 +94,23 @@ The daemon:
 - applies dedupe/rate-limit policy
 - retries with backoff if adapter/network is temporarily unavailable
 
+Run daemon in a container (CEC mode):
+
+```bash
+docker run --rm -it \
+  --network host \
+  --device /dev/cec0:/dev/cec0 \
+  ghcr.io/<owner>/<repo>:latest \
+  daemon --input cec --cec-vendor-compat="samsung"
+```
+
+Notes:
+- `--device /dev/cec0:/dev/cec0` passes the Linux CEC device into the container.
+- `--network host` is required for mDNS discovery (`_http._tcp.local`) from the container.
+- `--cec-vendor-compat samsung` enables Samsung vendor compatibility mode for this run.
+- alternatively, set `DEVIALETCTL_CEC_VENDOR_COMPAT=samsung` to make it the environment default.
+- with a fixed target IP (`DEVIALETCTL_IP`), you can usually run without host networking.
+
 Run daemon with keyboard input (no CEC hardware required):
 
 ```bash
