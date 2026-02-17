@@ -83,3 +83,28 @@ def test_discover_deduplicates_services(monkeypatch) -> None:
     assert len(found) == 1
     assert found[0].address == "10.0.0.2"
     assert fake_zc.closed is True
+
+
+def test_discover_keeps_browser_alive_during_sleep(monkeypatch) -> None:
+    class FakeZC:
+        def close(self) -> None:
+            return None
+
+    finalized = {"value": False}
+
+    class FakeBrowser:
+        def __init__(self, _zc, _service_type, _listener):
+            pass
+
+        def __del__(self) -> None:
+            finalized["value"] = True
+
+    monkeypatch.setattr(mdns_gateway, "Zeroconf", lambda: FakeZC())
+    monkeypatch.setattr(mdns_gateway, "ServiceBrowser", FakeBrowser)
+
+    def _sleep(_timeout: float) -> None:
+        assert finalized["value"] is False
+
+    monkeypatch.setattr(mdns_gateway.time, "sleep", _sleep)
+    mdns_gateway.MdnsDiscoveryGateway().discover(timeout_s=0.01)
+    assert finalized["value"] is True
