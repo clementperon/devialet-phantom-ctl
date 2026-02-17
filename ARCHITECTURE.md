@@ -26,7 +26,8 @@ Provide a maintainable local-control platform for Devialet Phantom volume, with:
   - `ports.py`: contracts (`VolumeGateway`, discovery target models)
 - `src/devialetctl/infrastructure`
   - `devialet_gateway.py`: async HTTP calls to Devialet API (`httpx.AsyncClient`)
-  - `mdns_gateway.py`: zeroconf discovery + filtering
+  - `mdns_gateway.py`: mDNS/zeroconf discovery + filtering
+  - `upnp_gateway.py`: SSDP/UPnP discovery (`MediaRenderer:2`)
   - `cec_adapter.py`: Linux CEC kernel adapter (`/dev/cec0`, ioctl, async event stream)
   - `keyboard_adapter.py`: single-key or line-based keyboard input
   - `config.py`: typed runtime config (TOML + env overrides)
@@ -62,6 +63,7 @@ flowchart LR
     keyboardAdapter[KeyboardAdapter]
     httpGateway[DevialetHttpGateway]
     mdnsGateway[MdnsDiscoveryGateway]
+    upnpGateway[UpnpDiscoveryGateway]
     configLoader[ConfigLoader]
   end
 
@@ -79,8 +81,11 @@ flowchart LR
   volumeService --> httpGateway
   httpGateway --> devialetSpeaker
   devialetSpeaker --> mdnsGateway
+  devialetSpeaker --> upnpGateway
   daemonInterface --> mdnsGateway
+  daemonInterface --> upnpGateway
   cliInterface --> mdnsGateway
+  cliInterface --> upnpGateway
   configLoader --> daemonInterface
   configLoader --> cliInterface
 ```
@@ -88,7 +93,7 @@ flowchart LR
 ## Command Surface
 
 - Direct control:
-  - `list`, `systems`, `getvol`, `setvol`, `volup`, `voldown`, `mute`
+  - `list`, `tree`, `systems`, `getvol`, `setvol`, `volup`, `voldown`, `mute`
 - Daemon:
   - `daemon --input cec`
   - `daemon --input keyboard`
@@ -97,7 +102,14 @@ flowchart LR
 
 ## Runtime Behavior
 
-- mDNS discovery filters likely Devialet devices by service identity heuristics.
+- Discovery uses merged mDNS + UPnP:
+  - mDNS path: `_http._tcp.local` browsing with TXT/path-based filtering.
+  - UPnP path: SSDP `M-SEARCH` with target `urn:schemas-upnp-org:device:MediaRenderer:2`.
+  - targets are deduplicated by `(address, port, base_path)` before selection.
+- `tree` command builds a topology from "current" endpoints:
+  - per discovered dispatcher: `/devices/current`
+  - per inferred system: `/systems/current`
+  - groups are rebuilt from `groupId`/`systemId` relationships.
 - Base path is normalized defensively:
   - `None`, `""`, `/` -> `/ipcontrol/v1`
   - missing leading slash is corrected.
@@ -178,8 +190,8 @@ Current test suite covers:
 - keyboard parser behavior
 - event policy dedupe/rate-limit
 - daemon routing in CEC and keyboard modes
-- CLI regressions (including daemon argument handling)
-- mDNS filtering
+- CLI regressions (including daemon argument handling and `tree --json`)
+- mDNS + UPnP discovery integration
 - base-path normalization
 - compatibility wrappers
 
