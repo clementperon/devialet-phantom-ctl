@@ -1,6 +1,7 @@
 import argparse
 import dataclasses
 import logging
+import os
 import sys
 
 from devialetctl.application.daemon import DaemonRunner
@@ -86,12 +87,19 @@ def _configure_logging(level: str) -> None:
     logging.basicConfig(
         level=getattr(logging, level.upper(), logging.INFO),
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        force=True,
     )
 
 
 def main() -> None:
     p = argparse.ArgumentParser(
         prog="devialetctl", description="Devialet Phantom IP Control (discover + commands)"
+    )
+    p.add_argument(
+        "--log-level",
+        type=str,
+        default=None,
+        help="Override log level (e.g. DEBUG, INFO, WARNING).",
     )
     p.add_argument("--discover-timeout", type=float, default=3.0)
     p.add_argument("--index", type=int, default=None)
@@ -129,6 +137,10 @@ def main() -> None:
     )
 
     args = p.parse_args()
+    requested_log_level = args.log_level or os.getenv("DEVIALETCTL_LOG_LEVEL")
+    if requested_log_level is not None:
+        _configure_logging(requested_log_level)
+
     if args.cmd == "list":
         services = MdnsDiscoveryGateway().discover(timeout_s=args.discover_timeout)
         if not services:
@@ -157,7 +169,8 @@ def main() -> None:
                     else cfg.cec_vendor_compat
                 ),
             )
-            _configure_logging(cfg.log_level)
+            if requested_log_level is None:
+                _configure_logging(cfg.log_level)
             target = _target_from_config(args)
             gateway = DevialetHttpGateway(target.address, target.port, target.base_path)
             runner = DaemonRunner(cfg=cfg, gateway=gateway)
