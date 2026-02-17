@@ -27,8 +27,7 @@ class DaemonConfig:
     target: RuntimeTarget
     cec_device: str = "/dev/cec0"
     cec_osd_name: str = "Devialet"
-    cec_vendor_id: int = 0x0000F0
-    cec_announce_vendor_id: bool = True
+    cec_vendor_compat: str = "none"
     reconnect_delay_s: float = 2.0
     log_level: str = "INFO"
     dedupe_window_s: float = 0.08
@@ -63,15 +62,13 @@ class _DaemonConfigModel(BaseModel):
     target: _TargetConfigModel = Field(default_factory=_TargetConfigModel)
     cec_device: str = "/dev/cec0"
     cec_osd_name: str = "Devialet"
-    cec_vendor_id: int = 0x0000F0
-    cec_announce_vendor_id: bool = True
+    cec_vendor_compat: str = "none"
     reconnect_delay_s: float = 2.0
     log_level: str = "INFO"
     dedupe_window_s: float = 0.08
     min_interval_s: float = 0.12
 
     @field_validator(
-        "cec_vendor_id",
         "reconnect_delay_s",
         "dedupe_window_s",
         "min_interval_s",
@@ -87,6 +84,14 @@ class _DaemonConfigModel(BaseModel):
     @classmethod
     def _uppercase_log_level(cls, value):
         return str(value).upper()
+
+    @field_validator("cec_vendor_compat", mode="before")
+    @classmethod
+    def _normalize_vendor_compat(cls, value):
+        normalized = str(value).strip().lower()
+        if normalized not in {"none", "samsung"}:
+            raise ValueError("cec_vendor_compat must be one of: none, samsung")
+        return normalized
 
 
 def _default_config_path() -> Path:
@@ -120,6 +125,7 @@ def _merge_env_overrides(data: dict[str, Any]) -> dict[str, Any]:
     env_base = os.getenv("DEVIALETCTL_BASE_PATH")
     env_log_level = os.getenv("DEVIALETCTL_LOG_LEVEL")
     env_cec_device = os.getenv("DEVIALETCTL_CEC_DEVICE")
+    env_cec_vendor_compat = os.getenv("DEVIALETCTL_CEC_VENDOR_COMPAT")
     if env_ip is not None:
         target_data["ip"] = env_ip
     if env_port is not None:
@@ -130,6 +136,8 @@ def _merge_env_overrides(data: dict[str, Any]) -> dict[str, Any]:
         merged["log_level"] = env_log_level
     if env_cec_device is not None:
         merged["cec_device"] = env_cec_device
+    if env_cec_vendor_compat is not None:
+        merged["cec_vendor_compat"] = env_cec_vendor_compat
 
     merged["target"] = target_data
     return merged
@@ -154,8 +162,7 @@ def load_config(path: str | None = None) -> DaemonConfig:
         target=target,
         cec_device=parsed.cec_device,
         cec_osd_name=parsed.cec_osd_name,
-        cec_vendor_id=parsed.cec_vendor_id,
-        cec_announce_vendor_id=parsed.cec_announce_vendor_id,
+        cec_vendor_compat=parsed.cec_vendor_compat,
         reconnect_delay_s=parsed.reconnect_delay_s,
         log_level=parsed.log_level,
         dedupe_window_s=parsed.dedupe_window_s,
