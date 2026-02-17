@@ -184,3 +184,22 @@ def test_cli_daemon_handles_runtime_error(monkeypatch, capsys) -> None:
     assert exc.value.code == 2
     err = capsys.readouterr().err
     assert "Daemon error: boom" in err
+
+
+def test_cli_list_applies_log_level_from_env(monkeypatch, capsys) -> None:
+    class FakeDiscovery:
+        def discover(self, timeout_s):
+            return []
+
+    captured = {"level": None}
+
+    def fake_configure(level):
+        captured["level"] = level
+
+    monkeypatch.setattr(cli, "MdnsDiscoveryGateway", lambda: FakeDiscovery())
+    monkeypatch.setattr(cli, "_configure_logging", fake_configure)
+    monkeypatch.setenv("DEVIALETCTL_LOG_LEVEL", "DEBUG")
+    monkeypatch.setattr(sys, "argv", ["devialetctl", "list"])
+    cli.main()
+    _ = capsys.readouterr().out
+    assert captured["level"] == "DEBUG"

@@ -1,23 +1,13 @@
+import logging
 import time
 from dataclasses import dataclass
-from typing import Dict
 
 from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
 
 from devialetctl.application.ports import DiscoveryPort, Target
-from devialetctl.infrastructure.devialet_gateway import normalize_base_path
-import logging
 
 LOG = logging.getLogger(__name__)
-
-
-def _is_likely_devialet(name: str, txt_path: str | None) -> bool:
-    n = name.lower()
-    if "devialet" in n or "phantom" in n or "expert" in n:
-        return True
-    if txt_path and "ipcontrol" in txt_path.lower():
-        return True
-    return False
+_DEFAULT_MDNS_SERVICE_TYPE = "_whatsup._tcp.local."
 
 
 @dataclass(frozen=True)
@@ -48,33 +38,21 @@ class _Listener(ServiceListener):
             LOG.debug("mDNS ignore service name=%s reason=no_ipv4_address", name)
             return
 
-        props: Dict[str, str] = {}
-        for k, v in (info.properties or {}).items():
-            try:
-                props[k.decode("utf-8")] = v.decode("utf-8")
-            except Exception:
-                pass
-
-        txt_path = props.get("path")
-        base_path = normalize_base_path(txt_path)
-        svc = MdnsService(name=name, address=addr, port=info.port, base_path=base_path)
-        if _is_likely_devialet(name=name, txt_path=txt_path):
-            LOG.debug(
-                "mDNS accept service name=%s addr=%s port=%s base_path=%s txt_path=%s",
-                name,
-                addr,
-                info.port,
-                base_path,
-                txt_path,
-            )
+        service_type_lc = service_type.lower()
+        if service_type_lc == "_whatsup._tcp.local.":
+            # Devialet "_whatsup" SRV records expose an ephemeral service port.
+            # We still control the speaker through HTTP on :80 /ipcontrol/v1.
+            svc = MdnsService(name=name, address=addr, port=80, base_path="/ipcontrol/v1")
+            LOG.debug("mDNS accept service name=%s addr=%s reason=whatsup_service", name, addr)
             self.services.append(svc)
-        else:
-            LOG.debug(
-                "mDNS reject service name=%s addr=%s txt_path=%s reason=not_likely_devialet",
-                name,
-                addr,
-                txt_path,
-            )
+            return
+
+        LOG.debug(
+            "mDNS reject service name=%s addr=%s reason=unsupported_service_type(%s)",
+            name,
+            addr,
+            service_type,
+        )
 
     def update_service(self, zeroconf: Zeroconf, service_type: str, name: str) -> None:
         return None
@@ -84,8 +62,8 @@ class _Listener(ServiceListener):
 
 
 class MdnsDiscoveryGateway(DiscoveryPort):
-    def __init__(self, service_type: str = "_http._tcp.local.") -> None:
-        self.service_type = service_type
+    def __init__(self, service_type: str | None = None) -> None:
+        self.service_type = service_type or _DEFAULT_MDNS_SERVICE_TYPE
 
     def discover(self, timeout_s: float = 3.0) -> list[Target]:
         LOG.debug(
@@ -115,7 +93,7 @@ class MdnsDiscoveryGateway(DiscoveryPort):
             for s in uniq.values()
         ]
         LOG.debug(
-            "mDNS discovery done raw_services=%d unique_targets=%d",
+            "mDNS discovery done accepted=%d unique_targets=%d",
             len(listener.services),
             len(targets),
         )
