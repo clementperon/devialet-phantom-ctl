@@ -12,7 +12,7 @@ Use cases:
 
 ## Features
 
-- mDNS discovery (`_http._tcp.local`)
+- mDNS discovery (`_http._tcp.local`) with UPnP fallback
 - volume commands: `getvol`, `setvol`, `volup`, `voldown`, `mute`
 - manual target override (`--ip`, `--port`, `--base-path`)
 - long-running daemon mode (`daemon --input cec`)

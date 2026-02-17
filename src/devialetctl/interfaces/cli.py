@@ -10,12 +10,13 @@ from devialetctl.application.service import VolumeService
 from devialetctl.infrastructure.config import load_config
 from devialetctl.infrastructure.devialet_gateway import DevialetHttpGateway, normalize_base_path
 from devialetctl.infrastructure.mdns_gateway import MdnsDiscoveryGateway
+from devialetctl.infrastructure.upnp_gateway import UpnpDiscoveryGateway
 
 
 def _pick(services: list[Target], index: int | None):
     if not services:
         raise RuntimeError(
-            "No service detected via mDNS (Bonjour). Check network / Wi-Fi isolation."
+            "No service detected via mDNS/UPnP. Check network / Wi-Fi isolation."
         )
     if index is None:
         if len(services) == 1:
@@ -26,6 +27,19 @@ def _pick(services: list[Target], index: int | None):
     if index < 0 or index >= len(services):
         raise RuntimeError(f"Invalid index: {index}")
     return services[index]
+
+
+def _discover_targets(timeout_s: float) -> list[Target]:
+    seen: set[tuple[str, int, str]] = set()
+    merged: list[Target] = []
+    for gateway in (MdnsDiscoveryGateway(), UpnpDiscoveryGateway()):
+        for svc in gateway.discover(timeout_s=timeout_s):
+            key = (svc.address, svc.port, svc.base_path)
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(svc)
+    return merged
 
 
 def _target_from_args(args) -> Target:
@@ -50,7 +64,7 @@ def _target_from_args(args) -> Target:
         return Target(
             address=ip, port=port, base_path=normalize_base_path(base_path), name="manual"
         )
-    services = MdnsDiscoveryGateway().discover(timeout_s=discover_timeout)
+    services = _discover_targets(timeout_s=discover_timeout)
     return _pick(services, index)
 
 
@@ -79,7 +93,7 @@ def _target_from_config(args) -> Target:
         else cfg.target.discover_timeout
     )
     index = args.daemon_index if args.daemon_index is not None else cfg.target.index
-    services = MdnsDiscoveryGateway().discover(timeout_s=timeout)
+    services = _discover_targets(timeout_s=timeout)
     return _pick(services, index)
 
 
@@ -142,7 +156,7 @@ def main() -> None:
         _configure_logging(requested_log_level)
 
     if args.cmd == "list":
-        services = MdnsDiscoveryGateway().discover(timeout_s=args.discover_timeout)
+        services = _discover_targets(timeout_s=args.discover_timeout)
         if not services:
             print("No service detected.")
             return
