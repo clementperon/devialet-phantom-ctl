@@ -53,7 +53,11 @@ def _iter_ssdp_responses(timeout_s: float) -> Iterable[dict[str, str]]:
             ]
         ).encode("ascii")
         LOG.debug("UPnP SSDP M-SEARCH start st=%s timeout_s=%.2f", _SSDP_SEARCH_TARGET, timeout_s)
-        sock.sendto(msg, _SSDP_ADDR)
+        try:
+            sock.sendto(msg, _SSDP_ADDR)
+        except OSError:
+            LOG.debug("UPnP SSDP send aborted due to socket error")
+            return
 
         deadline = time.monotonic() + max(0.1, timeout_s)
         while True:
