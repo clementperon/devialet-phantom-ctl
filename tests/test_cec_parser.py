@@ -1,5 +1,5 @@
 from devialetctl.domain.events import InputEventType
-from devialetctl.infrastructure.cec_adapter import parse_cec_frame
+from devialetctl.infrastructure.cec_adapter import format_cec_frame_human, parse_cec_frame
 
 
 def test_parse_cec_user_control_pressed_variants() -> None:
@@ -94,3 +94,16 @@ def test_parse_samsung_vendor_a0_with_id() -> None:
     assert event is not None
     assert event.kind == InputEventType.SAMSUNG_VENDOR_COMMAND_WITH_ID
     assert event.vendor_payload == (0x00, 0x00, 0xF0, 0x95, 0xFF)
+
+
+def test_format_human_readable_samsung_vendor_sync_volume() -> None:
+    text = format_cec_frame_human("05:89:96:19")
+    assert "TV -> Audio System" in text
+    assert "SAMSUNG_VENDOR_COMMAND (SYNC_TV_VOLUME)" in text
+    assert "payload=96:19" in text
+
+
+def test_format_human_readable_samsung_vendor_model_name() -> None:
+    text = format_cec_frame_human("05:89:88:12:34")
+    assert "SAMSUNG_VENDOR_COMMAND (MODEL_NAME)" in text
+    assert "payload=88:12:34" in text

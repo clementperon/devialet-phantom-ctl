@@ -70,6 +70,14 @@ _CEC_OPCODE_NAMES: dict[str, str] = {
     "C5": "TERMINATE_ARC",
 }
 
+_SAMSUNG_VENDOR_SUBCOMMAND_NAMES: dict[int, str] = {
+    0x88: "MODEL_NAME",
+    0x92: "MODE_UPDATE",
+    0x95: "SYNC_TV_VOLUME_REQUEST",
+    0x96: "SYNC_TV_VOLUME",
+    0xA2: "VENDOR_0xA2",
+}
+
 _USER_CONTROL_KEYCODE_MAP: dict[str, tuple[InputEventType, str]] = {
     "41": (InputEventType.VOLUME_UP, "VOLUME_UP"),
     "42": (InputEventType.VOLUME_DOWN, "VOLUME_DOWN"),
@@ -237,7 +245,21 @@ def format_cec_frame_human(frame: str) -> str:
     opcode = parts[1]
     initiator_name = _LOGICAL_ADDRESS_NAMES.get(initiator, f"LA{initiator:X}")
     destination_name = _LOGICAL_ADDRESS_NAMES.get(destination, f"LA{destination:X}")
-    opcode_name = _CEC_OPCODE_NAMES.get(opcode, f"OPCODE_0x{opcode}")
+    if opcode == "89":
+        opcode_name = "SAMSUNG_VENDOR_COMMAND"
+        if len(parts) > 2:
+            try:
+                subcommand = int(parts[2], 16)
+            except ValueError:
+                subcommand = None
+            if subcommand is not None:
+                sub_name = _SAMSUNG_VENDOR_SUBCOMMAND_NAMES.get(
+                    subcommand,
+                    f"VENDOR_SUBCOMMAND_0x{subcommand:02X}",
+                )
+                opcode_name = f"{opcode_name} ({sub_name})"
+    else:
+        opcode_name = _CEC_OPCODE_NAMES.get(opcode, f"OPCODE_0x{opcode}")
     payload = ""
     if len(parts) > 2:
         payload = f" payload={':'.join(parts[2:])}"
