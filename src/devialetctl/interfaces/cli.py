@@ -93,6 +93,9 @@ def _configure_logging(level: str) -> None:
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
         force=True,
     )
+    # Keep CLI/app logs at requested level but silence verbose HTTP client access logs.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 def _validate_target_selection_args(parser: argparse.ArgumentParser, args) -> None:
