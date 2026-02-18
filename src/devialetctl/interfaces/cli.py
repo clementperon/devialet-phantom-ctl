@@ -44,9 +44,7 @@ def _effective_options(args, cfg) -> _EffectiveOptions:
 
 def _pick(services: list[Target]) -> Target:
     if not services:
-        raise RuntimeError(
-            "No service detected via mDNS/UPnP. Check network / Wi-Fi isolation."
-        )
+        raise RuntimeError("No service detected via mDNS/UPnP. Check network / Wi-Fi isolation.")
     if len(services) == 1:
         return services[0]
     for i, s in enumerate(services):
@@ -93,6 +91,9 @@ def _configure_logging(level: str) -> None:
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
         force=True,
     )
+    # Keep CLI/app logs at requested level but silence verbose HTTP client access logs.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 def _validate_target_selection_args(parser: argparse.ArgumentParser, args) -> None:
