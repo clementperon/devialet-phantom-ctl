@@ -27,15 +27,9 @@ class _EffectiveOptions:
     port: int
     discover_timeout: float
     system: str | None
-    cec_device: str
-    cec_osd_name: str
-    cec_vendor_compat: str
 
 
 def _effective_options(args, cfg) -> _EffectiveOptions:
-    cec_device_arg = getattr(args, "cec_device", None)
-    cec_osd_name_arg = getattr(args, "cec_osd_name", None)
-    cec_vendor_compat_arg = getattr(args, "cec_vendor_compat", None)
     return _EffectiveOptions(
         ip=args.ip if args.ip is not None else cfg.target.ip,
         port=args.port if args.port is not None else cfg.target.port,
@@ -45,13 +39,6 @@ def _effective_options(args, cfg) -> _EffectiveOptions:
             else cfg.target.discover_timeout
         ),
         system=args.system,
-        cec_device=cec_device_arg if cec_device_arg is not None else cfg.cec_device,
-        cec_osd_name=cec_osd_name_arg if cec_osd_name_arg is not None else cfg.cec_osd_name,
-        cec_vendor_compat=(
-            cec_vendor_compat_arg
-            if cec_vendor_compat_arg is not None
-            else cfg.cec_vendor_compat
-        ),
     )
 
 
@@ -116,7 +103,7 @@ def _validate_target_selection_args(parser: argparse.ArgumentParser, args) -> No
         )
 
 
-def _dispatch_command(args, daemon_cfg, resolved: _EffectiveOptions) -> None:
+def _dispatch_command(args, cfg, resolved: _EffectiveOptions) -> None:
     if args.cmd == "list":
         services = _discover_targets(timeout_s=resolved.discover_timeout)
         if not services:
@@ -144,6 +131,16 @@ def _dispatch_command(args, daemon_cfg, resolved: _EffectiveOptions) -> None:
 
     if args.cmd == "daemon":
         try:
+            daemon_cfg = dataclasses.replace(
+                cfg,
+                cec_device=args.cec_device if args.cec_device is not None else cfg.cec_device,
+                cec_osd_name=args.cec_osd_name if args.cec_osd_name is not None else cfg.cec_osd_name,
+                cec_vendor_compat=(
+                    args.cec_vendor_compat
+                    if args.cec_vendor_compat is not None
+                    else cfg.cec_vendor_compat
+                ),
+            )
             runner = DaemonRunner(cfg=daemon_cfg, gateway=gateway)
             runner.run_forever(input_name=args.input)
             return
@@ -191,13 +188,6 @@ def main() -> None:
     p.add_argument("--system", type=str, default=None, help="System name from 'tree' output.")
     p.add_argument("--ip", type=str, default=None, help="Manual IP (bypass discovery)")
     p.add_argument("--port", type=int, default=None)
-    p.add_argument("--cec-device", type=str, default=None)
-    p.add_argument("--cec-osd-name", type=str, default=None)
-    p.add_argument(
-        "--cec-vendor-compat",
-        choices=["none", "samsung"],
-        default=None,
-    )
 
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("list")
@@ -213,17 +203,18 @@ def main() -> None:
 
     daemon = sub.add_parser("daemon")
     daemon.add_argument("--input", choices=["cec", "keyboard"], default="cec")
+    daemon.add_argument("--cec-device", type=str, default=None)
+    daemon.add_argument("--cec-osd-name", type=str, default=None)
+    daemon.add_argument(
+        "--cec-vendor-compat",
+        choices=["none", "samsung"],
+        default=None,
+    )
 
     args = p.parse_args()
     _validate_target_selection_args(p, args)
     cfg = load_config(args.config)
     resolved = _effective_options(args, cfg)
-    daemon_cfg = dataclasses.replace(
-        cfg,
-        cec_device=resolved.cec_device,
-        cec_osd_name=resolved.cec_osd_name,
-        cec_vendor_compat=resolved.cec_vendor_compat,
-    )
     requested_log_level = args.log_level or os.getenv("DEVIALETCTL_LOG_LEVEL")
     _configure_logging(requested_log_level if requested_log_level is not None else cfg.log_level)
-    _dispatch_command(args, daemon_cfg, resolved)
+    _dispatch_command(args, cfg, resolved)
