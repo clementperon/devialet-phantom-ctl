@@ -255,7 +255,7 @@ class CecKernelAdapter:
     _log_addrs_busy_retries: tuple[float, ...] = (0.1, 0.25, 0.5)
     _async_poll_interval_s: float = 0.05
 
-    def _vendor_announce_frame(self) -> str:
+    def _vendor_broadcast_announce_frame(self) -> str:
         vid = int(self.vendor_id) & 0xFFFFFF
         return f"5F:87:{(vid >> 16) & 0xFF:02X}:{(vid >> 8) & 0xFF:02X}:{vid & 0xFF:02X}"
 
@@ -351,7 +351,7 @@ class CecKernelAdapter:
         try:
             self._configure(fd)
             if self.announce_vendor_id and self.spoof_vendor_id:
-                self.send_tx(self._vendor_announce_frame())
+                self.send_tx(self._vendor_broadcast_announce_frame())
 
             while True:
                 try:
