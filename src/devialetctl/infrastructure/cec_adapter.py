@@ -252,6 +252,7 @@ class CecKernelAdapter:
     spoof_vendor_id: bool = False
     source: str = "cec"
     _fd: int | None = None
+    _effective_vendor_id: int | None = None
     _log_addrs_busy_retries: tuple[float, ...] = (0.1, 0.25, 0.5)
     _async_poll_interval_s: float = 0.05
 
@@ -269,6 +270,7 @@ class CecKernelAdapter:
 
         current = CecLogAddrs()
         fcntl.ioctl(fd, CEC_ADAP_G_LOG_ADDRS, current)
+        self._effective_vendor_id = int(current.vendor_id) & 0xFFFFFF
         if self._has_audio_system_claim(current):
             LOG.info(
                 "kernel cec adapter already configured as Audio System "
@@ -282,9 +284,11 @@ class CecKernelAdapter:
         addrs.cec_version = CEC_OP_CEC_VERSION_1_4
         if self.spoof_vendor_id:
             addrs.vendor_id = int(self.vendor_id) & 0xFFFFFF
+            self._effective_vendor_id = int(addrs.vendor_id) & 0xFFFFFF
         else:
             # Preserve current adapter vendor identity unless explicitly spoofing.
             addrs.vendor_id = int(current.vendor_id) & 0xFFFFFF
+            self._effective_vendor_id = int(current.vendor_id) & 0xFFFFFF
         encoded_name = self.osd_name.encode("ascii", errors="ignore")[:14]
         addrs.osd_name = encoded_name
         addrs.primary_device_type[0] = CEC_OP_PRIM_DEVTYPE_AUDIOSYSTEM
@@ -313,6 +317,11 @@ class CecKernelAdapter:
                     len(retry_delays),
                     retry_delays[idx + 1],
                 )
+
+    def get_effective_vendor_id(self) -> int:
+        if self._effective_vendor_id is not None:
+            return int(self._effective_vendor_id) & 0xFFFFFF
+        return int(self.vendor_id) & 0xFFFFFF
 
     @staticmethod
     def _msg_from_frame(frame: str) -> CecMsg:

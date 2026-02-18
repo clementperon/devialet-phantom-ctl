@@ -19,20 +19,24 @@ _VENDOR_COMPAT_VENDOR_ID: dict[str, int] = {
 }
 
 
-def _fixed_frame(frame: str) -> Callable[["DaemonRunner"], str]:
-    return lambda _runner: frame
+def _fixed_system_frame(frame: str) -> Callable[["DaemonRunner", CecKernelAdapter], str]:
+    return lambda _runner, _adapter: frame
 
 
-_CEC_SYSTEM_RESPONSE_MAP: dict[InputEventType, Callable[["DaemonRunner"], str]] = {
-    InputEventType.SYSTEM_AUDIO_MODE_REQUEST: _fixed_frame("50:72:01"),
-    InputEventType.GIVE_SYSTEM_AUDIO_MODE_STATUS: _fixed_frame("50:7E:01"),
-    InputEventType.REQUEST_ARC_INITIATION: _fixed_frame("50:C0"),
-    InputEventType.REQUEST_ARC_TERMINATION: _fixed_frame("50:C5"),
+_CecSystemFrameBuilder = Callable[["DaemonRunner", CecKernelAdapter], str | None]
+
+_CEC_SYSTEM_RESPONSE_MAP: dict[InputEventType, _CecSystemFrameBuilder] = {
+    InputEventType.SYSTEM_AUDIO_MODE_REQUEST: _fixed_system_frame("50:72:01"),
+    InputEventType.GIVE_SYSTEM_AUDIO_MODE_STATUS: _fixed_system_frame("50:7E:01"),
+    InputEventType.REQUEST_ARC_INITIATION: _fixed_system_frame("50:C0"),
+    InputEventType.REQUEST_ARC_TERMINATION: _fixed_system_frame("50:C5"),
     # REPORT_SHORT_AUDIO_DESCRIPTOR with one valid LPCM SAD:
     # format=LPCM (1), channels=2, rates=32/44.1/48kHz, sizes=16/20/24bit
-    InputEventType.REQUEST_SHORT_AUDIO_DESCRIPTOR: _fixed_frame("50:A3:09:07:07"),
-    InputEventType.GIVE_DEVICE_VENDOR_ID: lambda runner: runner._vendor_announce_frame(),
-    InputEventType.GIVE_OSD_NAME: lambda runner: runner._osd_name_frame(),
+    InputEventType.REQUEST_SHORT_AUDIO_DESCRIPTOR: _fixed_system_frame("50:A3:09:07:07"),
+    InputEventType.GIVE_DEVICE_VENDOR_ID: (
+        lambda runner, adapter: runner._vendor_response_frame(adapter)
+    ),
+    InputEventType.GIVE_OSD_NAME: lambda runner, adapter: runner._osd_name_frame(),
 }
 
 
@@ -156,7 +160,10 @@ class DaemonRunner:
         frame_builder = _CEC_SYSTEM_RESPONSE_MAP.get(kind)
         if frame_builder is None:
             return False
-        frame = frame_builder(self)
+        frame = frame_builder(self, adapter)
+        if not frame:
+            LOG.debug("cannot build CEC system response frame for event=%s", kind.value)
+            return True
         sent = self._send_tx(adapter, frame)
         if sent:
             LOG.debug("sent CEC system response frame: %s", frame)
@@ -365,8 +372,13 @@ class DaemonRunner:
     def _vendor_id_for_profile(self) -> int:
         return _VENDOR_COMPAT_VENDOR_ID.get(self.cfg.cec_vendor_compat, 0)
 
-    def _vendor_announce_frame(self) -> str:
-        vid = int(self._vendor_id_for_profile()) & 0xFFFFFF
+    def _vendor_response_frame(self, adapter: CecKernelAdapter) -> str | None:
+        if hasattr(adapter, "get_effective_vendor_id"):
+            vid = int(adapter.get_effective_vendor_id()) & 0xFFFFFF
+        else:
+            vid = int(self._vendor_id_for_profile()) & 0xFFFFFF
+            if not self._should_spoof_vendor_id():
+                return None
         return f"50:87:{(vid >> 16) & 0xFF:02X}:{(vid >> 8) & 0xFF:02X}:{vid & 0xFF:02X}"
 
     def _osd_name_frame(self) -> str:

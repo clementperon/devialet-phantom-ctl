@@ -171,6 +171,9 @@ def test_daemon_runner_replies_system_audio_and_arc_requests(monkeypatch) -> Non
         def __init__(self, **kwargs):
             self.kwargs = kwargs
 
+        def get_effective_vendor_id(self) -> int:
+            return 0x123456
+
         async def async_events(self):
             yield InputEvent(
                 kind=InputEventType.SYSTEM_AUDIO_MODE_REQUEST,
@@ -227,7 +230,7 @@ def test_daemon_runner_replies_system_audio_and_arc_requests(monkeypatch) -> Non
         "50:C0",
         "50:C5",
         "50:A3:09:07:07",
-        "50:87:00:00:00",
+        "50:87:12:34:56",
         "50:47:44:65:76:69:61:6C:65:74",
     ]
 
