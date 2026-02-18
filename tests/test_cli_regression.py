@@ -167,7 +167,11 @@ def test_cli_daemon_accepts_subcommand_system(monkeypatch) -> None:
     monkeypatch.setattr(cli, "MdnsDiscoveryGateway", lambda: FakeDiscovery())
     monkeypatch.setattr(cli, "DevialetHttpGateway", FakeGateway)
     monkeypatch.setattr(cli, "DaemonRunner", FakeRunner)
-    monkeypatch.setattr(sys, "argv", ["devialetctl", "--system", "TV", "daemon", "--input", "keyboard"])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["devialetctl", "--system", "TV", "daemon", "--input", "keyboard"],
+    )
     cli.main()
     assert FakeGateway.picked_address == "10.0.0.11"
 
@@ -300,7 +304,11 @@ def test_cli_getvol_system_name_not_found(monkeypatch) -> None:
 
 
 def test_cli_rejects_ip_and_system_together(monkeypatch, capsys) -> None:
-    monkeypatch.setattr(sys, "argv", ["devialetctl", "--ip", "10.0.0.2", "--system", "TV", "getvol"])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["devialetctl", "--ip", "10.0.0.2", "--system", "TV", "getvol"],
+    )
     with pytest.raises(SystemExit) as exc:
         cli.main()
     assert exc.value.code == 2

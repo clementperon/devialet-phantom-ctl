@@ -33,6 +33,7 @@ Provide a maintainable local-control platform for Devialet Phantom volume, with:
   - `config.py`: typed runtime config (TOML + env overrides)
 - `src/devialetctl/interfaces`
   - `cli.py`: argparse and command wiring
+  - `topology.py`: topology tree building/rendering and system-name target selection
 - Compatibility shims
   - `src/devialetctl/api.py`
   - `src/devialetctl/discovery.py`
@@ -98,7 +99,10 @@ flowchart LR
   - `daemon --input cec`
   - `daemon --input keyboard`
 - Target selection:
-  - global args and daemon-specific target args (`--ip`, `--port`, `--system`, `--discover-timeout`)
+  - global args (`--ip`, `--port`, `--system`, `--discover-timeout`)
+  - daemon-specific CEC args (`--cec-device`, `--cec-osd-name`, `--cec-vendor-compat`)
+  - `--ip` and `--system` are mutually exclusive
+  - `list` and `tree` reject `--ip` / `--system` because they are discovery-only
 
 ## Runtime Behavior
 
@@ -110,6 +114,7 @@ flowchart LR
   - per discovered dispatcher: `/devices/current`
   - per inferred system: `/systems/current`
   - groups are rebuilt from `groupId`/`systemId` relationships.
+  - system-targeted selection (`--system`) prefers `isSystemLeader` when available.
 - Base path is normalized defensively:
   - `None`, `""`, `/` -> `/ipcontrol/v1`
   - missing leading slash is corrected.
@@ -165,7 +170,7 @@ sequenceDiagram
 ## Configuration Model
 
 Config source priority:
-1. CLI daemon target args (when provided)
+1. CLI global target args (when provided)
 2. Environment variables (`DEVIALETCTL_IP`, `DEVIALETCTL_PORT`, `DEVIALETCTL_BASE_PATH`)
 3. TOML config (`~/.config/devialetctl/config.toml`)
 4. built-in defaults

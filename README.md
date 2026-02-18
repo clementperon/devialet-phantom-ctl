@@ -14,6 +14,7 @@ Use cases:
 
 - mDNS discovery (`_whatsup._tcp.local`) merged with UPnP discovery
 - volume commands: `getvol`, `setvol`, `volup`, `voldown`, `mute`
+- target selection with `--system <name>` (preferred for multi-device setups)
 - manual target override (`--ip`, `--port`)
 - long-running daemon mode (`daemon --input cec`)
 - keyboard test mode (`daemon --input keyboard`)
@@ -69,12 +70,24 @@ Use explicit target:
 uv run devialetctl --ip 192.168.1.42 --port 80 getvol
 ```
 
+Use system-name target selection (from `tree` output):
+
+```bash
+uv run devialetctl --system "TV" getvol
+```
+
 ## Daemon (CEC Input)
 
 Run daemon with config:
 
 ```bash
 uv run devialetctl daemon --input cec
+```
+
+Override daemon CEC settings for one run (global options stay before subcommand):
+
+```bash
+uv run devialetctl --system "TV" daemon --input cec --cec-vendor-compat samsung
 ```
 
 The daemon:
@@ -101,7 +114,7 @@ docker run --rm -it \
   --network host \
   --device /dev/cec0:/dev/cec0 \
   ghcr.io/<owner>/<repo>:latest \
-  daemon --input cec --cec-vendor-compat="samsung"
+  --system "TV" daemon --input cec --cec-vendor-compat="samsung"
 ```
 
 Notes:
@@ -158,6 +171,10 @@ Environment overrides:
 - `DEVIALETCTL_BASE_PATH`
 - `DEVIALETCTL_LOG_LEVEL`
 - `DEVIALETCTL_CEC_DEVICE`
+
+CLI target selection notes:
+- `--ip` and `--system` are mutually exclusive.
+- `list` and `tree` are discovery-only commands and reject `--ip` / `--system`.
 
 Kernel CEC permissions note:
 - the daemon user must have read/write access to `/dev/cec0` (typically via `video` group or udev rule)
