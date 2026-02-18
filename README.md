@@ -12,9 +12,9 @@ Use cases:
 
 ## Features
 
-- mDNS discovery (`_http._tcp.local`) with UPnP fallback
+- mDNS discovery (`_whatsup._tcp.local`) merged with UPnP discovery
 - volume commands: `getvol`, `setvol`, `volup`, `voldown`, `mute`
-- manual target override (`--ip`, `--port`, `--base-path`)
+- manual target override (`--ip`, `--port`)
 - long-running daemon mode (`daemon --input cec`)
 - keyboard test mode (`daemon --input keyboard`)
 - typed config via TOML + env overrides
@@ -66,7 +66,7 @@ uv run devialetctl setvol 35
 Use explicit target:
 
 ```bash
-uv run devialetctl --ip 192.168.1.42 --port 80 --base-path /ipcontrol/v1 getvol
+uv run devialetctl --ip 192.168.1.42 --port 80 getvol
 ```
 
 ## Daemon (CEC Input)
@@ -106,7 +106,7 @@ docker run --rm -it \
 
 Notes:
 - `--device /dev/cec0:/dev/cec0` passes the Linux CEC device into the container.
-- `--network host` is required for mDNS discovery (`_http._tcp.local`) from the container.
+- `--network host` is required for mDNS discovery (`_whatsup._tcp.local`) from the container.
 - `--cec-vendor-compat samsung` enables Samsung vendor compatibility mode for this run.
 - alternatively, set `DEVIALETCTL_CEC_VENDOR_COMPAT=samsung` to make it the environment default.
 - with a fixed target IP (`DEVIALETCTL_IP`), you can usually run without host networking.
@@ -145,9 +145,6 @@ min_interval_s = 0.12
 [target]
 ip = "192.168.1.42"
 port = 80
-base_path = "/ipcontrol/v1"
-discover_timeout = 3.0
-index = 0
 ```
 
 Use `log_level = "DEBUG"` (or `DEVIALETCTL_LOG_LEVEL=DEBUG`) to log raw HDMI-CEC frames:

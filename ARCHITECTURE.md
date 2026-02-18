@@ -98,12 +98,12 @@ flowchart LR
   - `daemon --input cec`
   - `daemon --input keyboard`
 - Target selection:
-  - global args and daemon-specific target args (`--ip`, `--port`, `--base-path`, `--index`, `--discover-timeout`)
+  - global args and daemon-specific target args (`--ip`, `--port`, `--system`, `--discover-timeout`)
 
 ## Runtime Behavior
 
 - Discovery uses merged mDNS + UPnP:
-  - mDNS path: `_http._tcp.local` browsing with TXT/path-based filtering.
+  - mDNS path: `_whatsup._tcp.local` browsing.
   - UPnP path: SSDP `M-SEARCH` with target `urn:schemas-upnp-org:device:MediaRenderer:2`.
   - targets are deduplicated by `(address, port, base_path)` before selection.
 - `tree` command builds a topology from "current" endpoints:
@@ -171,7 +171,7 @@ Config source priority:
 4. built-in defaults
 
 Relevant settings:
-- target: `ip`, `port`, `base_path`, `discover_timeout`, `index`
+- target: `ip`, `port`, `base_path`, `discover_timeout`
 - daemon: `cec_device`, `cec_osd_name`, `cec_vendor_compat`, `reconnect_delay_s`, `log_level`
 - policy: `dedupe_window_s`, `min_interval_s`
 

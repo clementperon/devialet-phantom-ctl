@@ -11,12 +11,7 @@ def _service(name="dev", address="10.0.0.2", port=80, base_path="/ipcontrol/v1")
 
 def test_pick_raises_on_empty_list() -> None:
     with pytest.raises(RuntimeError, match="No service"):
-        cli._pick([], None)
-
-
-def test_pick_raises_on_invalid_index() -> None:
-    with pytest.raises(RuntimeError, match="Invalid index"):
-        cli._pick([_service()], 5)
+        cli._pick([])
 
 
 def test_target_from_args_uses_daemon_overrides() -> None:
@@ -24,14 +19,12 @@ def test_target_from_args_uses_daemon_overrides() -> None:
         cmd="daemon",
         ip=None,
         port=80,
-        base_path="/ipcontrol/v1",
         discover_timeout=3.0,
-        index=None,
+        system=None,
         daemon_ip="10.0.0.9",
         daemon_port=8080,
-        daemon_base_path="/",
         daemon_discover_timeout=1.0,
-        daemon_index=1,
+        daemon_system=None,
     )
     target = cli._target_from_args(args)
     assert target.address == "10.0.0.9"

@@ -10,27 +10,25 @@ from devialetctl.application.daemon import DaemonRunner
 from devialetctl.application.ports import Target
 from devialetctl.application.service import VolumeService
 from devialetctl.infrastructure.config import load_config
-from devialetctl.infrastructure.devialet_gateway import DevialetHttpGateway, normalize_base_path
+from devialetctl.infrastructure.devialet_gateway import DevialetHttpGateway
 from devialetctl.infrastructure.mdns_gateway import MdnsDiscoveryGateway
 from devialetctl.infrastructure.upnp_gateway import UpnpDiscoveryGateway
 
 LOG = logging.getLogger(__name__)
 
 
-def _pick(services: list[Target], index: int | None):
+def _pick(services: list[Target]) -> Target:
     if not services:
         raise RuntimeError(
             "No service detected via mDNS/UPnP. Check network / Wi-Fi isolation."
         )
-    if index is None:
-        if len(services) == 1:
-            return services[0]
-        for i, s in enumerate(services):
-            print(f"[{i}] {s.name} -> {s.address}:{s.port}{s.base_path}")
-        raise RuntimeError("Multiple services detected. Run again with --index N.")
-    if index < 0 or index >= len(services):
-        raise RuntimeError(f"Invalid index: {index}")
-    return services[index]
+    if len(services) == 1:
+        return services[0]
+    for i, s in enumerate(services):
+        print(f"[{i}] {s.name} -> {s.address}:{s.port}{s.base_path}")
+    raise RuntimeError(
+        "Multiple services detected. Use --system <name> to pick one, or --ip to force a target."
+    )
 
 
 def _pick_by_system_name(services: list[Target], system_name: str) -> Target:
@@ -58,7 +56,7 @@ def _pick_by_system_name(services: list[Target], system_name: str) -> Target:
         groups = ", ".join(sorted({m[0] for m in matches}))
         raise RuntimeError(
             f"System name '{requested}' is ambiguous across groups: {groups}. "
-            "Use --index or rename systems."
+            "Use --ip or rename systems."
         )
 
     group_id, system = matches[0]
@@ -233,31 +231,25 @@ def _render_topology_tree_lines(tree: dict) -> list[str]:
 def _target_from_args(args) -> Target:
     ip = args.ip
     port = args.port
-    base_path = args.base_path
     discover_timeout = args.discover_timeout
-    index = args.index
     system = args.system
 
     if getattr(args, "cmd", None) == "daemon":
         ip = args.daemon_ip if args.daemon_ip is not None else ip
         port = args.daemon_port if args.daemon_port is not None else port
-        base_path = args.daemon_base_path if args.daemon_base_path is not None else base_path
         discover_timeout = (
             args.daemon_discover_timeout
             if args.daemon_discover_timeout is not None
             else discover_timeout
         )
-        index = args.daemon_index if args.daemon_index is not None else index
         system = args.daemon_system if args.daemon_system is not None else system
 
     if ip:
-        return Target(
-            address=ip, port=port, base_path=normalize_base_path(base_path), name="manual"
-        )
+        return Target(address=ip, port=port, base_path="/ipcontrol/v1", name="manual")
     services = _discover_targets(timeout_s=discover_timeout)
     if system is not None:
         return _pick_by_system_name(services, system)
-    return _pick(services, index)
+    return _pick(services)
 
 
 def _target_from_config(args) -> Target:
@@ -266,9 +258,7 @@ def _target_from_config(args) -> Target:
         return Target(
             address=args.daemon_ip,
             port=args.daemon_port if args.daemon_port is not None else 80,
-            base_path=normalize_base_path(
-                args.daemon_base_path if args.daemon_base_path is not None else "/ipcontrol/v1"
-            ),
+            base_path="/ipcontrol/v1",
             name="manual",
         )
 
@@ -287,9 +277,8 @@ def _target_from_config(args) -> Target:
     if args.daemon_system is not None:
         services = _discover_targets(timeout_s=timeout)
         return _pick_by_system_name(services, args.daemon_system)
-    index = args.daemon_index if args.daemon_index is not None else cfg.target.index
     services = _discover_targets(timeout_s=timeout)
-    return _pick(services, index)
+    return _pick(services)
 
 
 def _configure_logging(level: str) -> None:
@@ -311,11 +300,9 @@ def main() -> None:
         help="Override log level (e.g. DEBUG, INFO, WARNING).",
     )
     p.add_argument("--discover-timeout", type=float, default=3.0)
-    p.add_argument("--index", type=int, default=None)
     p.add_argument("--system", type=str, default=None, help="System name from 'tree' output.")
     p.add_argument("--ip", type=str, default=None, help="Manual IP (bypass discovery)")
     p.add_argument("--port", type=int, default=80)
-    p.add_argument("--base-path", type=str, default="/ipcontrol/v1")
 
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("list")
@@ -335,11 +322,9 @@ def main() -> None:
     daemon.add_argument(
         "--discover-timeout", dest="daemon_discover_timeout", type=float, default=None
     )
-    daemon.add_argument("--index", dest="daemon_index", type=int, default=None)
     daemon.add_argument("--system", dest="daemon_system", type=str, default=None)
     daemon.add_argument("--ip", dest="daemon_ip", type=str, default=None)
     daemon.add_argument("--port", dest="daemon_port", type=int, default=None)
-    daemon.add_argument("--base-path", dest="daemon_base_path", type=str, default=None)
     daemon.add_argument("--cec-device", dest="daemon_cec_device", type=str, default=None)
     daemon.add_argument("--cec-osd-name", dest="daemon_cec_osd_name", type=str, default=None)
     daemon.add_argument(

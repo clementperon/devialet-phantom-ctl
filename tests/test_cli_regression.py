@@ -107,7 +107,7 @@ def test_cli_daemon_keyboard_selects_runner_mode(monkeypatch) -> None:
     assert FakeRunner.called_with == "keyboard"
 
 
-def test_cli_daemon_accepts_subcommand_index(monkeypatch) -> None:
+def test_cli_daemon_accepts_subcommand_system(monkeypatch) -> None:
     class FakeDiscovery:
         def discover(self, timeout_s):
             class S0:
@@ -129,6 +129,30 @@ def test_cli_daemon_accepts_subcommand_index(monkeypatch) -> None:
 
         def __init__(self, address, port, base_path):
             FakeGateway.picked_address = address
+            self.address = address
+            self.port = port
+            self.base_path = base_path
+
+        async def fetch_json_async(self, path):
+            if path == "/devices/current":
+                if self.address == "10.0.0.10":
+                    return {
+                        "deviceId": "dev0",
+                        "systemId": "sys-other",
+                        "groupId": "grp-other",
+                        "deviceName": "Other",
+                    }
+                return {
+                    "deviceId": "dev1",
+                    "systemId": "sys-tv",
+                    "groupId": "grp-tv",
+                    "deviceName": "TV",
+                }
+            if path == "/systems/current":
+                if self.address == "10.0.0.10":
+                    return {"systemName": "Other", "groupId": "grp-other"}
+                return {"systemName": "TV", "groupId": "grp-tv"}
+            return {}
 
     class FakeRunner:
         def __init__(self, cfg, gateway):
@@ -141,11 +165,7 @@ def test_cli_daemon_accepts_subcommand_index(monkeypatch) -> None:
     monkeypatch.setattr(cli, "MdnsDiscoveryGateway", lambda: FakeDiscovery())
     monkeypatch.setattr(cli, "DevialetHttpGateway", FakeGateway)
     monkeypatch.setattr(cli, "DaemonRunner", FakeRunner)
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["devialetctl", "daemon", "--input", "keyboard", "--index", "1"],
-    )
+    monkeypatch.setattr(sys, "argv", ["devialetctl", "daemon", "--input", "keyboard", "--system", "TV"])
     cli.main()
     assert FakeGateway.picked_address == "10.0.0.11"
 
