@@ -2,8 +2,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from devialetctl.interfaces import cli
 from devialetctl.infrastructure.config import DaemonConfig, RuntimeTarget
+from devialetctl.interfaces import cli
 
 
 def _service(name="dev", address="10.0.0.2", port=80, base_path="/ipcontrol/v1"):

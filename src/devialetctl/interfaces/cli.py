@@ -71,7 +71,12 @@ def _discover_targets(timeout_s: float) -> list[Target]:
 
 def _target_from_resolved(resolved: _EffectiveOptions) -> Target:
     if resolved.ip:
-        return Target(address=resolved.ip, port=resolved.port, base_path="/ipcontrol/v1", name="manual")
+        return Target(
+            address=resolved.ip,
+            port=resolved.port,
+            base_path="/ipcontrol/v1",
+            name="manual",
+        )
     services = _discover_targets(timeout_s=resolved.discover_timeout)
     if resolved.system is not None:
         return pick_target_by_system_name(
@@ -93,13 +98,15 @@ def _configure_logging(level: str) -> None:
 def _validate_target_selection_args(parser: argparse.ArgumentParser, args) -> None:
     if args.ip and args.system:
         parser.error(
-            "--ip and --system are not compatible: --ip disables discovery while --system requires discovery."
+            "--ip and --system are not compatible: "
+            "--ip disables discovery while --system requires discovery."
         )
     if args.cmd in {"list", "tree"} and args.ip:
         parser.error(f"--ip is not supported with '{args.cmd}': this command is discovery-based.")
     if args.cmd in {"list", "tree"} and args.system:
         parser.error(
-            f"--system is not supported with '{args.cmd}': this command already lists discovered systems."
+            f"--system is not supported with '{args.cmd}': "
+            "this command already lists discovered systems."
         )
 
 
@@ -134,7 +141,9 @@ def _dispatch_command(args, cfg, resolved: _EffectiveOptions) -> None:
             daemon_cfg = dataclasses.replace(
                 cfg,
                 cec_device=args.cec_device if args.cec_device is not None else cfg.cec_device,
-                cec_osd_name=args.cec_osd_name if args.cec_osd_name is not None else cfg.cec_osd_name,
+                cec_osd_name=(
+                    args.cec_osd_name if args.cec_osd_name is not None else cfg.cec_osd_name
+                ),
                 cec_vendor_compat=(
                     args.cec_vendor_compat
                     if args.cec_vendor_compat is not None
