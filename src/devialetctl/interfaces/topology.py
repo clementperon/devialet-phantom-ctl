@@ -17,6 +17,7 @@ class DeviceRow:
     serial: str
     address: str
     port: int
+    is_system_leader: bool
 
 
 @dataclasses.dataclass(frozen=True)
@@ -51,6 +52,7 @@ def _device_row_to_dict(dev: DeviceRow) -> dict:
         "serial": dev.serial,
         "address": dev.address,
         "port": dev.port,
+        "is_system_leader": dev.is_system_leader,
     }
 
 
@@ -78,6 +80,7 @@ def build_topology_tree(targets: list[Target], gateway_factory=DevialetHttpGatew
             "group_id": group_id,
             "address": target.address,
             "port": target.port,
+            "is_system_leader": bool(device.get("isSystemLeader")),
         }
 
     if not devices_by_id:
@@ -127,6 +130,7 @@ def build_topology_tree(targets: list[Target], gateway_factory=DevialetHttpGatew
                     serial=str(dev["serial"]),
                     address=str(dev["address"]),
                     port=int(dev["port"]),
+                    is_system_leader=bool(dev["is_system_leader"]),
                 )
                 for dev in sorted(system_data["devices"], key=lambda d: d["device_name"])
             ]
@@ -148,6 +152,7 @@ def build_topology_tree(targets: list[Target], gateway_factory=DevialetHttpGatew
             serial=str(dev["serial"]),
             address=str(dev["address"]),
             port=int(dev["port"]),
+            is_system_leader=bool(dev["is_system_leader"]),
         )
         for dev in sorted(
             [d for d in devices_by_id.values() if d["system_id"] is None],
@@ -231,7 +236,7 @@ def pick_target_by_system_name(
     devices = system.get("devices", [])
     if not devices:
         raise RuntimeError(f"System '{requested}' has no reachable devices in group {group_id}.")
-    selected = devices[0]
+    selected = next((d for d in devices if d.get("is_system_leader")), devices[0])
     return Target(
         address=str(selected["address"]),
         port=int(selected["port"]),

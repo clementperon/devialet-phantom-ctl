@@ -141,12 +141,14 @@ def test_cli_daemon_accepts_subcommand_system(monkeypatch) -> None:
                         "systemId": "sys-other",
                         "groupId": "grp-other",
                         "deviceName": "Other",
+                        "isSystemLeader": True,
                     }
                 return {
                     "deviceId": "dev1",
                     "systemId": "sys-tv",
                     "groupId": "grp-tv",
                     "deviceName": "TV",
+                    "isSystemLeader": True,
                 }
             if path == "/systems/current":
                 if self.address == "10.0.0.10":
@@ -209,6 +211,7 @@ def test_cli_getvol_accepts_system_name_selection(monkeypatch, capsys) -> None:
                         "deviceName": "Salon",
                         "model": "Phantom",
                         "role": "Mono",
+                        "isSystemLeader": True,
                     }
                 if self.address == "10.0.0.71":
                     return {
@@ -218,6 +221,7 @@ def test_cli_getvol_accepts_system_name_selection(monkeypatch, capsys) -> None:
                         "deviceName": "TV Gauche",
                         "model": "Phantom",
                         "role": "FrontLeft",
+                        "isSystemLeader": True,
                     }
                 return {
                     "deviceId": "tv-right",
@@ -226,6 +230,7 @@ def test_cli_getvol_accepts_system_name_selection(monkeypatch, capsys) -> None:
                     "deviceName": "TV Droite",
                     "model": "Phantom",
                     "role": "FrontRight",
+                    "isSystemLeader": False,
                 }
             if path == "/systems/current":
                 if self.address in {"10.0.0.71", "10.0.0.184"}:
@@ -256,7 +261,7 @@ def test_cli_getvol_accepts_system_name_selection(monkeypatch, capsys) -> None:
     monkeypatch.setattr(sys, "argv", ["devialetctl", "--system", "TV", "getvol"])
     cli.main()
     out = capsys.readouterr().out
-    assert out.strip() in {"71", "184"}
+    assert out.strip() == "71"
 
 
 def test_cli_getvol_system_name_not_found(monkeypatch) -> None:
