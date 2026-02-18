@@ -17,6 +17,40 @@ from devialetctl.infrastructure.upnp_gateway import UpnpDiscoveryGateway
 LOG = logging.getLogger(__name__)
 
 
+@dataclasses.dataclass(frozen=True)
+class _EffectiveOptions:
+    ip: str | None
+    port: int
+    discover_timeout: float
+    system: str | None
+    cec_device: str
+    cec_osd_name: str
+    cec_vendor_compat: str
+
+
+def _effective_options(args, cfg) -> _EffectiveOptions:
+    cec_device_arg = getattr(args, "cec_device", None)
+    cec_osd_name_arg = getattr(args, "cec_osd_name", None)
+    cec_vendor_compat_arg = getattr(args, "cec_vendor_compat", None)
+    return _EffectiveOptions(
+        ip=args.ip if args.ip is not None else cfg.target.ip,
+        port=args.port if args.port is not None else cfg.target.port,
+        discover_timeout=(
+            args.discover_timeout
+            if args.discover_timeout is not None
+            else cfg.target.discover_timeout
+        ),
+        system=args.system,
+        cec_device=cec_device_arg if cec_device_arg is not None else cfg.cec_device,
+        cec_osd_name=cec_osd_name_arg if cec_osd_name_arg is not None else cfg.cec_osd_name,
+        cec_vendor_compat=(
+            cec_vendor_compat_arg
+            if cec_vendor_compat_arg is not None
+            else cfg.cec_vendor_compat
+        ),
+    )
+
+
 def _pick(services: list[Target]) -> Target:
     if not services:
         raise RuntimeError(
@@ -228,56 +262,12 @@ def _render_topology_tree_lines(tree: dict) -> list[str]:
     return lines
 
 
-def _target_from_args(args) -> Target:
-    ip = args.ip
-    port = args.port
-    discover_timeout = args.discover_timeout
-    system = args.system
-
-    if getattr(args, "cmd", None) == "daemon":
-        ip = args.daemon_ip if args.daemon_ip is not None else ip
-        port = args.daemon_port if args.daemon_port is not None else port
-        discover_timeout = (
-            args.daemon_discover_timeout
-            if args.daemon_discover_timeout is not None
-            else discover_timeout
-        )
-        system = args.daemon_system if args.daemon_system is not None else system
-
-    if ip:
-        return Target(address=ip, port=port, base_path="/ipcontrol/v1", name="manual")
-    services = _discover_targets(timeout_s=discover_timeout)
-    if system is not None:
-        return _pick_by_system_name(services, system)
-    return _pick(services)
-
-
-def _target_from_config(args) -> Target:
-    cfg = load_config(args.config)
-    if args.daemon_ip is not None:
-        return Target(
-            address=args.daemon_ip,
-            port=args.daemon_port if args.daemon_port is not None else 80,
-            base_path="/ipcontrol/v1",
-            name="manual",
-        )
-
-    if cfg.target.ip:
-        return Target(
-            address=cfg.target.ip,
-            port=cfg.target.port,
-            base_path=cfg.target.base_path,
-            name="config",
-        )
-    timeout = (
-        args.daemon_discover_timeout
-        if args.daemon_discover_timeout is not None
-        else cfg.target.discover_timeout
-    )
-    if args.daemon_system is not None:
-        services = _discover_targets(timeout_s=timeout)
-        return _pick_by_system_name(services, args.daemon_system)
-    services = _discover_targets(timeout_s=timeout)
+def _target_from_resolved(resolved: _EffectiveOptions) -> Target:
+    if resolved.ip:
+        return Target(address=resolved.ip, port=resolved.port, base_path="/ipcontrol/v1", name="manual")
+    services = _discover_targets(timeout_s=resolved.discover_timeout)
+    if resolved.system is not None:
+        return _pick_by_system_name(services, resolved.system)
     return _pick(services)
 
 
@@ -289,20 +279,35 @@ def _configure_logging(level: str) -> None:
     )
 
 
+def _validate_target_selection_args(parser: argparse.ArgumentParser, args) -> None:
+    if args.ip and args.system:
+        parser.error(
+            "--ip and --system are not compatible: --ip disables discovery while --system requires discovery."
+        )
+
+
 def main() -> None:
     p = argparse.ArgumentParser(
         prog="devialetctl", description="Devialet Phantom IP Control (discover + commands)"
     )
+    p.add_argument("--config", type=str, default=None)
     p.add_argument(
         "--log-level",
         type=str,
         default=None,
         help="Override log level (e.g. DEBUG, INFO, WARNING).",
     )
-    p.add_argument("--discover-timeout", type=float, default=3.0)
+    p.add_argument("--discover-timeout", type=float, default=None)
     p.add_argument("--system", type=str, default=None, help="System name from 'tree' output.")
     p.add_argument("--ip", type=str, default=None, help="Manual IP (bypass discovery)")
-    p.add_argument("--port", type=int, default=80)
+    p.add_argument("--port", type=int, default=None)
+    p.add_argument("--cec-device", type=str, default=None)
+    p.add_argument("--cec-osd-name", type=str, default=None)
+    p.add_argument(
+        "--cec-vendor-compat",
+        choices=["none", "samsung"],
+        default=None,
+    )
 
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("list")
@@ -318,29 +323,16 @@ def main() -> None:
 
     daemon = sub.add_parser("daemon")
     daemon.add_argument("--input", choices=["cec", "keyboard"], default="cec")
-    daemon.add_argument("--config", type=str, default=None)
-    daemon.add_argument(
-        "--discover-timeout", dest="daemon_discover_timeout", type=float, default=None
-    )
-    daemon.add_argument("--system", dest="daemon_system", type=str, default=None)
-    daemon.add_argument("--ip", dest="daemon_ip", type=str, default=None)
-    daemon.add_argument("--port", dest="daemon_port", type=int, default=None)
-    daemon.add_argument("--cec-device", dest="daemon_cec_device", type=str, default=None)
-    daemon.add_argument("--cec-osd-name", dest="daemon_cec_osd_name", type=str, default=None)
-    daemon.add_argument(
-        "--cec-vendor-compat",
-        dest="daemon_cec_vendor_compat",
-        choices=["none", "samsung"],
-        default=None,
-    )
 
     args = p.parse_args()
+    _validate_target_selection_args(p, args)
+    cfg = load_config(args.config)
+    resolved = _effective_options(args, cfg)
     requested_log_level = args.log_level or os.getenv("DEVIALETCTL_LOG_LEVEL")
-    if requested_log_level is not None:
-        _configure_logging(requested_log_level)
+    _configure_logging(requested_log_level if requested_log_level is not None else cfg.log_level)
 
     if args.cmd == "list":
-        services = _discover_targets(timeout_s=args.discover_timeout)
+        services = _discover_targets(timeout_s=resolved.discover_timeout)
         if not services:
             print("No service detected.")
             return
@@ -348,7 +340,7 @@ def main() -> None:
             print(f"[{i}] {s.name} -> {s.address}:{s.port}{s.base_path}")
         return
     if args.cmd == "tree":
-        services = _discover_targets(timeout_s=args.discover_timeout)
+        services = _discover_targets(timeout_s=resolved.discover_timeout)
         if not services:
             print("No service detected.")
             return
@@ -360,29 +352,17 @@ def main() -> None:
             print(line)
         return
 
+    target = _target_from_resolved(resolved)
+    gateway = DevialetHttpGateway(target.address, target.port, target.base_path)
+
     if args.cmd == "daemon":
         try:
-            cfg = load_config(args.config)
             cfg = dataclasses.replace(
                 cfg,
-                cec_device=(
-                    args.daemon_cec_device if args.daemon_cec_device is not None else cfg.cec_device
-                ),
-                cec_osd_name=(
-                    args.daemon_cec_osd_name
-                    if args.daemon_cec_osd_name is not None
-                    else cfg.cec_osd_name
-                ),
-                cec_vendor_compat=(
-                    args.daemon_cec_vendor_compat
-                    if args.daemon_cec_vendor_compat is not None
-                    else cfg.cec_vendor_compat
-                ),
+                cec_device=resolved.cec_device,
+                cec_osd_name=resolved.cec_osd_name,
+                cec_vendor_compat=resolved.cec_vendor_compat,
             )
-            if requested_log_level is None:
-                _configure_logging(cfg.log_level)
-            target = _target_from_config(args)
-            gateway = DevialetHttpGateway(target.address, target.port, target.base_path)
             runner = DaemonRunner(cfg=cfg, gateway=gateway)
             runner.run_forever(input_name=args.input)
             return
@@ -392,8 +372,7 @@ def main() -> None:
             print(f"Daemon error: {exc}", file=sys.stderr)
             raise SystemExit(2)
 
-    target = _target_from_args(args)
-    client = VolumeService(DevialetHttpGateway(target.address, target.port, target.base_path))
+    client = VolumeService(gateway)
 
     try:
         if args.cmd == "systems":
