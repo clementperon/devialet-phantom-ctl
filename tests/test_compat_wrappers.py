@@ -1,5 +1,5 @@
+import devialetctl.discovery as discovery_module
 from devialetctl.api import DevialetClient
-from devialetctl.discovery import discover
 
 
 def test_devialet_client_delegates_to_gateway(monkeypatch) -> None:
@@ -38,7 +38,7 @@ def test_devialet_client_delegates_to_gateway(monkeypatch) -> None:
 
 
 def test_discovery_wrapper(monkeypatch) -> None:
-    class FakeGateway:
+    class FakeMdnsGateway:
         def __init__(self, service_type):
             self.service_type = service_type
 
@@ -51,7 +51,17 @@ def test_discovery_wrapper(monkeypatch) -> None:
 
             return [Row()]
 
-    monkeypatch.setattr("devialetctl.discovery.MdnsDiscoveryGateway", FakeGateway)
-    found = discover(timeout_s=1.0)
+    class FakeUpnpGateway:
+        def discover(self, timeout_s):
+            return []
+
+    # Guardrail: fail immediately if this unit test ever touches real sockets.
+    def _forbid_socket(*args, **kwargs):
+        raise AssertionError("Network access is not allowed in unit test_discovery_wrapper")
+
+    monkeypatch.setattr("devialetctl.infrastructure.upnp_gateway.socket.socket", _forbid_socket)
+    monkeypatch.setattr(discovery_module, "MdnsDiscoveryGateway", FakeMdnsGateway)
+    monkeypatch.setattr(discovery_module, "UpnpDiscoveryGateway", lambda: FakeUpnpGateway())
+    found = discovery_module.discover(timeout_s=1.0)
     assert len(found) == 1
     assert found[0].address == "10.0.0.2"
