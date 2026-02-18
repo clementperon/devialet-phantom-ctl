@@ -495,3 +495,110 @@ def test_cli_list_applies_log_level_from_env(monkeypatch, capsys) -> None:
     cli.main()
     _ = capsys.readouterr().out
     assert captured["level"] == "DEBUG"
+
+
+@pytest.mark.parametrize(
+    ("argv", "expected_output"),
+    [
+        (["devialetctl", "systems"], "{}"),
+        (["devialetctl", "setvol", "35"], "OK"),
+        (["devialetctl", "volup"], "OK"),
+        (["devialetctl", "voldown"], "OK"),
+        (["devialetctl", "mute"], "OK"),
+    ],
+)
+def test_cli_control_commands_paths(monkeypatch, capsys, argv, expected_output) -> None:
+    class FakeDiscovery:
+        def discover(self, timeout_s):
+            class Row:
+                name = "phantom"
+                address = "10.0.0.2"
+                port = 80
+                base_path = "/ipcontrol/v1"
+
+            return [Row()]
+
+    class FakeGateway:
+        set_value = None
+        calls = []
+
+        def __init__(self, address, port, base_path):
+            self.address = address
+
+        async def systems_async(self):
+            return {}
+
+        async def get_volume_async(self):
+            return 31
+
+        async def set_volume_async(self, value):
+            FakeGateway.set_value = value
+            return None
+
+        async def volume_up_async(self):
+            FakeGateway.calls.append("up")
+            return None
+
+        async def volume_down_async(self):
+            FakeGateway.calls.append("down")
+            return None
+
+        async def mute_toggle_async(self):
+            FakeGateway.calls.append("mute")
+            return None
+
+    monkeypatch.setattr(cli, "MdnsDiscoveryGateway", lambda: FakeDiscovery())
+    monkeypatch.setattr(cli, "DevialetHttpGateway", FakeGateway)
+    monkeypatch.setattr(sys, "argv", argv)
+
+    cli.main()
+
+    out = capsys.readouterr().out
+    assert out.strip() == expected_output
+    if argv[1] == "setvol":
+        assert FakeGateway.set_value == 35
+
+
+def test_cli_tree_when_empty(monkeypatch, capsys) -> None:
+    class FakeDiscovery:
+        def discover(self, timeout_s):
+            return []
+
+    monkeypatch.setattr(cli, "MdnsDiscoveryGateway", lambda: FakeDiscovery())
+    monkeypatch.setattr(sys, "argv", ["devialetctl", "tree"])
+
+    cli.main()
+
+    out = capsys.readouterr().out
+    assert "No service detected." in out
+
+
+def test_cli_daemon_handles_keyboard_interrupt(monkeypatch) -> None:
+    class FakeDiscovery:
+        def discover(self, timeout_s):
+            class Row:
+                name = "phantom"
+                address = "10.0.0.2"
+                port = 80
+                base_path = "/ipcontrol/v1"
+
+            return [Row()]
+
+    class FakeGateway:
+        def __init__(self, address, port, base_path):
+            self.address = address
+
+    class FakeRunner:
+        def __init__(self, cfg, gateway):
+            self.cfg = cfg
+            self.gateway = gateway
+
+        def run_forever(self, input_name):
+            raise KeyboardInterrupt()
+
+    monkeypatch.setattr(cli, "MdnsDiscoveryGateway", lambda: FakeDiscovery())
+    monkeypatch.setattr(cli, "DevialetHttpGateway", FakeGateway)
+    monkeypatch.setattr(cli, "DaemonRunner", FakeRunner)
+    monkeypatch.setattr(sys, "argv", ["devialetctl", "daemon", "--input", "keyboard"])
+
+    cli.main()
