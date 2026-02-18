@@ -13,6 +13,8 @@ class InputEventType(str, Enum):
     REQUEST_ARC_INITIATION = "request_arc_initiation"
     REQUEST_ARC_TERMINATION = "request_arc_termination"
     REQUEST_SHORT_AUDIO_DESCRIPTOR = "request_short_audio_descriptor"
+    GIVE_DEVICE_VENDOR_ID = "give_device_vendor_id"
+    GIVE_OSD_NAME = "give_osd_name"
     SET_AUDIO_VOLUME_LEVEL = "set_audio_volume_level"
     SAMSUNG_VENDOR_COMMAND = "samsung_vendor_command"
     SAMSUNG_VENDOR_COMMAND_WITH_ID = "samsung_vendor_command_with_id"

@@ -41,10 +41,13 @@ _LOGICAL_ADDRESS_NAMES: dict[int, str] = {
     0xE: "Free Use",
     0xF: "Broadcast",
 }
+
 _CEC_OPCODE_NAMES: dict[str, str] = {
     "00": "FEATURE_ABORT",
     "44": "USER_CONTROL_PRESSED",
     "45": "USER_CONTROL_RELEASED",
+    "46": "GIVE_OSD_NAME",
+    "47": "SET_OSD_NAME",
     "70": "SYSTEM_AUDIO_MODE_REQUEST",
     "71": "GIVE_AUDIO_STATUS",
     "72": "SET_SYSTEM_AUDIO_MODE",
@@ -72,6 +75,7 @@ _USER_CONTROL_KEYCODE_MAP: dict[str, tuple[InputEventType, str]] = {
     "42": (InputEventType.VOLUME_DOWN, "VOLUME_DOWN"),
     "43": (InputEventType.MUTE, "MUTE"),
 }
+
 _SYSTEM_REQUEST_OPCODE_MAP: dict[str, tuple[InputEventType, str]] = {
     "70": (InputEventType.SYSTEM_AUDIO_MODE_REQUEST, "SYSTEM_AUDIO_MODE_REQUEST"),
     "7D": (InputEventType.GIVE_SYSTEM_AUDIO_MODE_STATUS, "GIVE_SYSTEM_AUDIO_MODE_STATUS"),
@@ -81,6 +85,8 @@ _SYSTEM_REQUEST_OPCODE_MAP: dict[str, tuple[InputEventType, str]] = {
         InputEventType.REQUEST_SHORT_AUDIO_DESCRIPTOR,
         "REQUEST_SHORT_AUDIO_DESCRIPTOR",
     ),
+    "8C": (InputEventType.GIVE_DEVICE_VENDOR_ID, "GIVE_DEVICE_VENDOR_ID"),
+    "46": (InputEventType.GIVE_OSD_NAME, "GIVE_OSD_NAME"),
 }
 
 
@@ -246,10 +252,11 @@ class CecKernelAdapter:
     spoof_vendor_id: bool = False
     source: str = "cec"
     _fd: int | None = None
+    _effective_vendor_id: int | None = None
     _log_addrs_busy_retries: tuple[float, ...] = (0.1, 0.25, 0.5)
     _async_poll_interval_s: float = 0.05
 
-    def _vendor_announce_frame(self) -> str:
+    def _vendor_broadcast_announce_frame(self) -> str:
         vid = int(self.vendor_id) & 0xFFFFFF
         return f"5F:87:{(vid >> 16) & 0xFF:02X}:{(vid >> 8) & 0xFF:02X}:{vid & 0xFF:02X}"
 
@@ -263,6 +270,7 @@ class CecKernelAdapter:
 
         current = CecLogAddrs()
         fcntl.ioctl(fd, CEC_ADAP_G_LOG_ADDRS, current)
+        self._effective_vendor_id = int(current.vendor_id) & 0xFFFFFF
         if self._has_audio_system_claim(current):
             LOG.info(
                 "kernel cec adapter already configured as Audio System "
@@ -276,9 +284,11 @@ class CecKernelAdapter:
         addrs.cec_version = CEC_OP_CEC_VERSION_1_4
         if self.spoof_vendor_id:
             addrs.vendor_id = int(self.vendor_id) & 0xFFFFFF
+            self._effective_vendor_id = int(addrs.vendor_id) & 0xFFFFFF
         else:
             # Preserve current adapter vendor identity unless explicitly spoofing.
             addrs.vendor_id = int(current.vendor_id) & 0xFFFFFF
+            self._effective_vendor_id = int(current.vendor_id) & 0xFFFFFF
         encoded_name = self.osd_name.encode("ascii", errors="ignore")[:14]
         addrs.osd_name = encoded_name
         addrs.primary_device_type[0] = CEC_OP_PRIM_DEVTYPE_AUDIOSYSTEM
@@ -307,6 +317,11 @@ class CecKernelAdapter:
                     len(retry_delays),
                     retry_delays[idx + 1],
                 )
+
+    def get_effective_vendor_id(self) -> int:
+        if self._effective_vendor_id is not None:
+            return int(self._effective_vendor_id) & 0xFFFFFF
+        return int(self.vendor_id) & 0xFFFFFF
 
     @staticmethod
     def _msg_from_frame(frame: str) -> CecMsg:
@@ -345,7 +360,7 @@ class CecKernelAdapter:
         try:
             self._configure(fd)
             if self.announce_vendor_id and self.spoof_vendor_id:
-                self.send_tx(self._vendor_announce_frame())
+                self.send_tx(self._vendor_broadcast_announce_frame())
 
             while True:
                 try:
