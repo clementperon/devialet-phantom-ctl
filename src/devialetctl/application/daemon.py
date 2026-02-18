@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import time
+from typing import Callable
 
 from devialetctl.application.router import EventRouter
 from devialetctl.application.service import VolumeService
@@ -16,14 +17,22 @@ _SAMSUNG_VENDOR_92_SUPPORTED_MODES = {0x01, 0x03, 0x04, 0x05, 0x06}
 _VENDOR_COMPAT_VENDOR_ID: dict[str, int] = {
     "samsung": 0x0000F0,
 }
-_CEC_SYSTEM_RESPONSE_MAP: dict[InputEventType, str] = {
-    InputEventType.SYSTEM_AUDIO_MODE_REQUEST: "50:72:01",
-    InputEventType.GIVE_SYSTEM_AUDIO_MODE_STATUS: "50:7E:01",
-    InputEventType.REQUEST_ARC_INITIATION: "50:C0",
-    InputEventType.REQUEST_ARC_TERMINATION: "50:C5",
+
+
+def _fixed_frame(frame: str) -> Callable[["DaemonRunner"], str]:
+    return lambda _runner: frame
+
+
+_CEC_SYSTEM_RESPONSE_MAP: dict[InputEventType, Callable[["DaemonRunner"], str]] = {
+    InputEventType.SYSTEM_AUDIO_MODE_REQUEST: _fixed_frame("50:72:01"),
+    InputEventType.GIVE_SYSTEM_AUDIO_MODE_STATUS: _fixed_frame("50:7E:01"),
+    InputEventType.REQUEST_ARC_INITIATION: _fixed_frame("50:C0"),
+    InputEventType.REQUEST_ARC_TERMINATION: _fixed_frame("50:C5"),
     # REPORT_SHORT_AUDIO_DESCRIPTOR with one valid LPCM SAD:
     # format=LPCM (1), channels=2, rates=32/44.1/48kHz, sizes=16/20/24bit
-    InputEventType.REQUEST_SHORT_AUDIO_DESCRIPTOR: "50:A3:09:07:07",
+    InputEventType.REQUEST_SHORT_AUDIO_DESCRIPTOR: _fixed_frame("50:A3:09:07:07"),
+    InputEventType.GIVE_DEVICE_VENDOR_ID: lambda runner: runner._vendor_announce_frame(),
+    InputEventType.GIVE_OSD_NAME: lambda runner: runner._osd_name_frame(),
 }
 
 
@@ -144,14 +153,15 @@ class DaemonRunner:
                 return
 
     def _handle_cec_system_request(self, adapter: CecKernelAdapter, kind: InputEventType) -> bool:
-        frame = _CEC_SYSTEM_RESPONSE_MAP.get(kind)
-        if frame is None:
+        frame_builder = _CEC_SYSTEM_RESPONSE_MAP.get(kind)
+        if frame_builder is None:
             return False
+        frame = frame_builder(self)
         sent = self._send_tx(adapter, frame)
         if sent:
-            LOG.debug("sent CEC system/ARC response frame: %s", frame)
+            LOG.debug("sent CEC system response frame: %s", frame)
         else:
-            LOG.debug("cannot send CEC system/ARC response frame: %s", frame)
+            LOG.debug("cannot send CEC system response frame: %s", frame)
         return True
 
     async def _report_audio_status_async(self, adapter: CecKernelAdapter) -> None:
@@ -354,6 +364,17 @@ class DaemonRunner:
 
     def _vendor_id_for_profile(self) -> int:
         return _VENDOR_COMPAT_VENDOR_ID.get(self.cfg.cec_vendor_compat, 0)
+
+    def _vendor_announce_frame(self) -> str:
+        vid = int(self._vendor_id_for_profile()) & 0xFFFFFF
+        return f"50:87:{(vid >> 16) & 0xFF:02X}:{(vid >> 8) & 0xFF:02X}:{vid & 0xFF:02X}"
+
+    def _osd_name_frame(self) -> str:
+        encoded = self.cfg.cec_osd_name.encode("ascii", errors="ignore")[:14]
+        if not encoded:
+            encoded = b"Audio"
+        payload = ":".join(f"{byte:02X}" for byte in encoded)
+        return f"50:47:{payload}"
 
     async def _relative_step_async(self, delta: int, fallback) -> None:
         try:

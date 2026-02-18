@@ -34,6 +34,8 @@ def test_parse_cec_system_audio_and_arc_requests() -> None:
     arc_init = parse_cec_frame("05:c3")
     arc_term = parse_cec_frame("05:c4")
     sad_req = parse_cec_frame("05:a4:02:0a")
+    give_vendor = parse_cec_frame("05:8c")
+    give_osd = parse_cec_frame("05:46")
     assert (
         sys_mode_req is not None and sys_mode_req.kind == InputEventType.SYSTEM_AUDIO_MODE_REQUEST
     )
@@ -44,6 +46,8 @@ def test_parse_cec_system_audio_and_arc_requests() -> None:
     assert arc_init is not None and arc_init.kind == InputEventType.REQUEST_ARC_INITIATION
     assert arc_term is not None and arc_term.kind == InputEventType.REQUEST_ARC_TERMINATION
     assert sad_req is not None and sad_req.kind == InputEventType.REQUEST_SHORT_AUDIO_DESCRIPTOR
+    assert give_vendor is not None and give_vendor.kind == InputEventType.GIVE_DEVICE_VENDOR_ID
+    assert give_osd is not None and give_osd.kind == InputEventType.GIVE_OSD_NAME
 
 
 def test_parse_cec_set_audio_volume_level() -> None:
@@ -63,7 +67,6 @@ def test_parse_cec_parses_outgoing_set_audio_volume_level_echo() -> None:
 
 
 def test_parse_cec_ignores_non_pressed_frames() -> None:
-    assert parse_cec_frame("05:46") is None
     assert parse_cec_frame("50:47:44:65:76:69:61:6c:65:74") is None
 
 

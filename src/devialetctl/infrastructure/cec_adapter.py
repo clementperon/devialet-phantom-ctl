@@ -41,10 +41,13 @@ _LOGICAL_ADDRESS_NAMES: dict[int, str] = {
     0xE: "Free Use",
     0xF: "Broadcast",
 }
+
 _CEC_OPCODE_NAMES: dict[str, str] = {
     "00": "FEATURE_ABORT",
     "44": "USER_CONTROL_PRESSED",
     "45": "USER_CONTROL_RELEASED",
+    "46": "GIVE_OSD_NAME",
+    "47": "SET_OSD_NAME",
     "70": "SYSTEM_AUDIO_MODE_REQUEST",
     "71": "GIVE_AUDIO_STATUS",
     "72": "SET_SYSTEM_AUDIO_MODE",
@@ -72,6 +75,7 @@ _USER_CONTROL_KEYCODE_MAP: dict[str, tuple[InputEventType, str]] = {
     "42": (InputEventType.VOLUME_DOWN, "VOLUME_DOWN"),
     "43": (InputEventType.MUTE, "MUTE"),
 }
+
 _SYSTEM_REQUEST_OPCODE_MAP: dict[str, tuple[InputEventType, str]] = {
     "70": (InputEventType.SYSTEM_AUDIO_MODE_REQUEST, "SYSTEM_AUDIO_MODE_REQUEST"),
     "7D": (InputEventType.GIVE_SYSTEM_AUDIO_MODE_STATUS, "GIVE_SYSTEM_AUDIO_MODE_STATUS"),
@@ -81,6 +85,8 @@ _SYSTEM_REQUEST_OPCODE_MAP: dict[str, tuple[InputEventType, str]] = {
         InputEventType.REQUEST_SHORT_AUDIO_DESCRIPTOR,
         "REQUEST_SHORT_AUDIO_DESCRIPTOR",
     ),
+    "8C": (InputEventType.GIVE_DEVICE_VENDOR_ID, "GIVE_DEVICE_VENDOR_ID"),
+    "46": (InputEventType.GIVE_OSD_NAME, "GIVE_OSD_NAME"),
 }
 
 
