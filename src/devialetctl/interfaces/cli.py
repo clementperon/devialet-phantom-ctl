@@ -1,5 +1,6 @@
 import argparse
 import dataclasses
+import json
 import logging
 import os
 import sys
@@ -8,79 +9,82 @@ from devialetctl.application.daemon import DaemonRunner
 from devialetctl.application.ports import Target
 from devialetctl.application.service import VolumeService
 from devialetctl.infrastructure.config import load_config
-from devialetctl.infrastructure.devialet_gateway import DevialetHttpGateway, normalize_base_path
+from devialetctl.infrastructure.devialet_gateway import DevialetHttpGateway
 from devialetctl.infrastructure.mdns_gateway import MdnsDiscoveryGateway
+from devialetctl.infrastructure.upnp_gateway import UpnpDiscoveryGateway
+from devialetctl.interfaces.topology import (
+    build_topology_tree,
+    pick_target_by_system_name,
+    render_topology_tree_lines,
+)
+
+LOG = logging.getLogger(__name__)
 
 
-def _pick(services: list[Target], index: int | None):
+@dataclasses.dataclass(frozen=True)
+class _EffectiveOptions:
+    ip: str | None
+    port: int
+    discover_timeout: float
+    system: str | None
+
+
+def _effective_options(args, cfg) -> _EffectiveOptions:
+    return _EffectiveOptions(
+        ip=args.ip if args.ip is not None else cfg.target.ip,
+        port=args.port if args.port is not None else cfg.target.port,
+        discover_timeout=(
+            args.discover_timeout
+            if args.discover_timeout is not None
+            else cfg.target.discover_timeout
+        ),
+        system=args.system,
+    )
+
+
+def _pick(services: list[Target]) -> Target:
     if not services:
         raise RuntimeError(
-            "No service detected via mDNS (Bonjour). Check network / Wi-Fi isolation."
+            "No service detected via mDNS/UPnP. Check network / Wi-Fi isolation."
         )
-    if index is None:
-        if len(services) == 1:
-            return services[0]
-        for i, s in enumerate(services):
-            print(f"[{i}] {s.name} -> {s.address}:{s.port}{s.base_path}")
-        raise RuntimeError("Multiple services detected. Run again with --index N.")
-    if index < 0 or index >= len(services):
-        raise RuntimeError(f"Invalid index: {index}")
-    return services[index]
+    if len(services) == 1:
+        return services[0]
+    for i, s in enumerate(services):
+        print(f"[{i}] {s.name} -> {s.address}:{s.port}{s.base_path}")
+    raise RuntimeError(
+        "Multiple services detected. Use --system <name> to pick one, or --ip to force a target."
+    )
 
 
-def _target_from_args(args) -> Target:
-    ip = args.ip
-    port = args.port
-    base_path = args.base_path
-    discover_timeout = args.discover_timeout
-    index = args.index
+def _discover_targets(timeout_s: float) -> list[Target]:
+    seen: set[tuple[str, int, str]] = set()
+    merged: list[Target] = []
+    for gateway in (MdnsDiscoveryGateway(), UpnpDiscoveryGateway()):
+        for svc in gateway.discover(timeout_s=timeout_s):
+            key = (svc.address, svc.port, svc.base_path)
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(svc)
+    return merged
 
-    if getattr(args, "cmd", None) == "daemon":
-        ip = args.daemon_ip if args.daemon_ip is not None else ip
-        port = args.daemon_port if args.daemon_port is not None else port
-        base_path = args.daemon_base_path if args.daemon_base_path is not None else base_path
-        discover_timeout = (
-            args.daemon_discover_timeout
-            if args.daemon_discover_timeout is not None
-            else discover_timeout
-        )
-        index = args.daemon_index if args.daemon_index is not None else index
 
-    if ip:
+def _target_from_resolved(resolved: _EffectiveOptions) -> Target:
+    if resolved.ip:
         return Target(
-            address=ip, port=port, base_path=normalize_base_path(base_path), name="manual"
-        )
-    services = MdnsDiscoveryGateway().discover(timeout_s=discover_timeout)
-    return _pick(services, index)
-
-
-def _target_from_config(args) -> Target:
-    cfg = load_config(args.config)
-    if args.daemon_ip is not None:
-        return Target(
-            address=args.daemon_ip,
-            port=args.daemon_port if args.daemon_port is not None else 80,
-            base_path=normalize_base_path(
-                args.daemon_base_path if args.daemon_base_path is not None else "/ipcontrol/v1"
-            ),
+            address=resolved.ip,
+            port=resolved.port,
+            base_path="/ipcontrol/v1",
             name="manual",
         )
-
-    if cfg.target.ip:
-        return Target(
-            address=cfg.target.ip,
-            port=cfg.target.port,
-            base_path=cfg.target.base_path,
-            name="config",
+    services = _discover_targets(timeout_s=resolved.discover_timeout)
+    if resolved.system is not None:
+        return pick_target_by_system_name(
+            services,
+            resolved.system,
+            gateway_factory=DevialetHttpGateway,
         )
-    timeout = (
-        args.daemon_discover_timeout
-        if args.daemon_discover_timeout is not None
-        else cfg.target.discover_timeout
-    )
-    index = args.daemon_index if args.daemon_index is not None else cfg.target.index
-    services = MdnsDiscoveryGateway().discover(timeout_s=timeout)
-    return _pick(services, index)
+    return _pick(services)
 
 
 def _configure_logging(level: str) -> None:
@@ -91,58 +95,24 @@ def _configure_logging(level: str) -> None:
     )
 
 
-def main() -> None:
-    p = argparse.ArgumentParser(
-        prog="devialetctl", description="Devialet Phantom IP Control (discover + commands)"
-    )
-    p.add_argument(
-        "--log-level",
-        type=str,
-        default=None,
-        help="Override log level (e.g. DEBUG, INFO, WARNING).",
-    )
-    p.add_argument("--discover-timeout", type=float, default=3.0)
-    p.add_argument("--index", type=int, default=None)
-    p.add_argument("--ip", type=str, default=None, help="Manual IP (bypass discovery)")
-    p.add_argument("--port", type=int, default=80)
-    p.add_argument("--base-path", type=str, default="/ipcontrol/v1")
+def _validate_target_selection_args(parser: argparse.ArgumentParser, args) -> None:
+    if args.ip and args.system:
+        parser.error(
+            "--ip and --system are not compatible: "
+            "--ip disables discovery while --system requires discovery."
+        )
+    if args.cmd in {"list", "tree"} and args.ip:
+        parser.error(f"--ip is not supported with '{args.cmd}': this command is discovery-based.")
+    if args.cmd in {"list", "tree"} and args.system:
+        parser.error(
+            f"--system is not supported with '{args.cmd}': "
+            "this command already lists discovered systems."
+        )
 
-    sub = p.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("list")
-    sub.add_parser("systems")
-    sub.add_parser("getvol")
-    sub.add_parser("volup")
-    sub.add_parser("voldown")
-    sub.add_parser("mute")
-    set_parser = sub.add_parser("setvol")
-    set_parser.add_argument("value", type=int)
 
-    daemon = sub.add_parser("daemon")
-    daemon.add_argument("--input", choices=["cec", "keyboard"], default="cec")
-    daemon.add_argument("--config", type=str, default=None)
-    daemon.add_argument(
-        "--discover-timeout", dest="daemon_discover_timeout", type=float, default=None
-    )
-    daemon.add_argument("--index", dest="daemon_index", type=int, default=None)
-    daemon.add_argument("--ip", dest="daemon_ip", type=str, default=None)
-    daemon.add_argument("--port", dest="daemon_port", type=int, default=None)
-    daemon.add_argument("--base-path", dest="daemon_base_path", type=str, default=None)
-    daemon.add_argument("--cec-device", dest="daemon_cec_device", type=str, default=None)
-    daemon.add_argument("--cec-osd-name", dest="daemon_cec_osd_name", type=str, default=None)
-    daemon.add_argument(
-        "--cec-vendor-compat",
-        dest="daemon_cec_vendor_compat",
-        choices=["none", "samsung"],
-        default=None,
-    )
-
-    args = p.parse_args()
-    requested_log_level = args.log_level or os.getenv("DEVIALETCTL_LOG_LEVEL")
-    if requested_log_level is not None:
-        _configure_logging(requested_log_level)
-
+def _dispatch_command(args, cfg, resolved: _EffectiveOptions) -> None:
     if args.cmd == "list":
-        services = MdnsDiscoveryGateway().discover(timeout_s=args.discover_timeout)
+        services = _discover_targets(timeout_s=resolved.discover_timeout)
         if not services:
             print("No service detected.")
             return
@@ -150,30 +120,37 @@ def main() -> None:
             print(f"[{i}] {s.name} -> {s.address}:{s.port}{s.base_path}")
         return
 
+    if args.cmd == "tree":
+        services = _discover_targets(timeout_s=resolved.discover_timeout)
+        if not services:
+            print("No service detected.")
+            return
+        tree = build_topology_tree(services, gateway_factory=DevialetHttpGateway)
+        if args.tree_json:
+            print(json.dumps(tree, indent=2, ensure_ascii=False))
+            return
+        for line in render_topology_tree_lines(tree):
+            print(line)
+        return
+
+    target = _target_from_resolved(resolved)
+    gateway = DevialetHttpGateway(target.address, target.port, target.base_path)
+
     if args.cmd == "daemon":
         try:
-            cfg = load_config(args.config)
-            cfg = dataclasses.replace(
+            daemon_cfg = dataclasses.replace(
                 cfg,
-                cec_device=(
-                    args.daemon_cec_device if args.daemon_cec_device is not None else cfg.cec_device
-                ),
+                cec_device=args.cec_device if args.cec_device is not None else cfg.cec_device,
                 cec_osd_name=(
-                    args.daemon_cec_osd_name
-                    if args.daemon_cec_osd_name is not None
-                    else cfg.cec_osd_name
+                    args.cec_osd_name if args.cec_osd_name is not None else cfg.cec_osd_name
                 ),
                 cec_vendor_compat=(
-                    args.daemon_cec_vendor_compat
-                    if args.daemon_cec_vendor_compat is not None
+                    args.cec_vendor_compat
+                    if args.cec_vendor_compat is not None
                     else cfg.cec_vendor_compat
                 ),
             )
-            if requested_log_level is None:
-                _configure_logging(cfg.log_level)
-            target = _target_from_config(args)
-            gateway = DevialetHttpGateway(target.address, target.port, target.base_path)
-            runner = DaemonRunner(cfg=cfg, gateway=gateway)
+            runner = DaemonRunner(cfg=daemon_cfg, gateway=gateway)
             runner.run_forever(input_name=args.input)
             return
         except KeyboardInterrupt:
@@ -182,9 +159,7 @@ def main() -> None:
             print(f"Daemon error: {exc}", file=sys.stderr)
             raise SystemExit(2)
 
-    target = _target_from_args(args)
-    client = VolumeService(DevialetHttpGateway(target.address, target.port, target.base_path))
-
+    client = VolumeService(gateway)
     try:
         if args.cmd == "systems":
             print(client.systems())
@@ -205,3 +180,50 @@ def main() -> None:
     except Exception as exc:
         print(f"Error: {exc}", file=sys.stderr)
         raise SystemExit(2)
+
+
+def main() -> None:
+    p = argparse.ArgumentParser(
+        prog="devialetctl", description="Devialet Phantom IP Control (discover + commands)"
+    )
+    p.add_argument("--config", type=str, default=None)
+    p.add_argument(
+        "--log-level",
+        type=str,
+        default=None,
+        help="Override log level (e.g. DEBUG, INFO, WARNING).",
+    )
+    p.add_argument("--discover-timeout", type=float, default=None)
+    p.add_argument("--system", type=str, default=None, help="System name from 'tree' output.")
+    p.add_argument("--ip", type=str, default=None, help="Manual IP (bypass discovery)")
+    p.add_argument("--port", type=int, default=None)
+
+    sub = p.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("list")
+    tree = sub.add_parser("tree")
+    tree.add_argument("--json", action="store_true", dest="tree_json")
+    sub.add_parser("systems")
+    sub.add_parser("getvol")
+    sub.add_parser("volup")
+    sub.add_parser("voldown")
+    sub.add_parser("mute")
+    set_parser = sub.add_parser("setvol")
+    set_parser.add_argument("value", type=int)
+
+    daemon = sub.add_parser("daemon")
+    daemon.add_argument("--input", choices=["cec", "keyboard"], default="cec")
+    daemon.add_argument("--cec-device", type=str, default=None)
+    daemon.add_argument("--cec-osd-name", type=str, default=None)
+    daemon.add_argument(
+        "--cec-vendor-compat",
+        choices=["none", "samsung"],
+        default=None,
+    )
+
+    args = p.parse_args()
+    _validate_target_selection_args(p, args)
+    cfg = load_config(args.config)
+    resolved = _effective_options(args, cfg)
+    requested_log_level = args.log_level or os.getenv("DEVIALETCTL_LOG_LEVEL")
+    _configure_logging(requested_log_level if requested_log_level is not None else cfg.log_level)
+    _dispatch_command(args, cfg, resolved)

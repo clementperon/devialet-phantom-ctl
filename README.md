@@ -12,9 +12,10 @@ Use cases:
 
 ## Features
 
-- mDNS discovery (`_http._tcp.local`)
+- mDNS discovery (`_whatsup._tcp.local`) merged with UPnP discovery
 - volume commands: `getvol`, `setvol`, `volup`, `voldown`, `mute`
-- manual target override (`--ip`, `--port`, `--base-path`)
+- target selection with `--system <name>` (preferred for multi-device setups)
+- manual target override (`--ip`, `--port`)
 - long-running daemon mode (`daemon --input cec`)
 - keyboard test mode (`daemon --input keyboard`)
 - typed config via TOML + env overrides
@@ -66,7 +67,13 @@ uv run devialetctl setvol 35
 Use explicit target:
 
 ```bash
-uv run devialetctl --ip 192.168.1.42 --port 80 --base-path /ipcontrol/v1 getvol
+uv run devialetctl --ip 192.168.1.42 --port 80 getvol
+```
+
+Use system-name target selection (from `tree` output):
+
+```bash
+uv run devialetctl --system "TV" getvol
 ```
 
 ## Daemon (CEC Input)
@@ -75,6 +82,12 @@ Run daemon with config:
 
 ```bash
 uv run devialetctl daemon --input cec
+```
+
+Override daemon CEC settings for one run (global options stay before subcommand):
+
+```bash
+uv run devialetctl --system "TV" daemon --input cec --cec-vendor-compat samsung
 ```
 
 The daemon:
@@ -100,13 +113,13 @@ Run daemon in a container (CEC mode):
 docker run --rm -it \
   --network host \
   --device /dev/cec0:/dev/cec0 \
-  ghcr.io/<owner>/<repo>:latest \
-  daemon --input cec --cec-vendor-compat="samsung"
+  ghcr.io/clementperon/devialet-phantom-ctl:latest \
+  --system "TV" daemon --input cec --cec-vendor-compat="samsung"
 ```
 
 Notes:
 - `--device /dev/cec0:/dev/cec0` passes the Linux CEC device into the container.
-- `--network host` is required for mDNS discovery (`_http._tcp.local`) from the container.
+- `--network host` is required for mDNS discovery (`_whatsup._tcp.local`) from the container.
 - `--cec-vendor-compat samsung` enables Samsung vendor compatibility mode for this run.
 - alternatively, set `DEVIALETCTL_CEC_VENDOR_COMPAT=samsung` to make it the environment default.
 - with a fixed target IP (`DEVIALETCTL_IP`), you can usually run without host networking.
@@ -145,9 +158,6 @@ min_interval_s = 0.12
 [target]
 ip = "192.168.1.42"
 port = 80
-base_path = "/ipcontrol/v1"
-discover_timeout = 3.0
-index = 0
 ```
 
 Use `log_level = "DEBUG"` (or `DEVIALETCTL_LOG_LEVEL=DEBUG`) to log raw HDMI-CEC frames:
@@ -161,6 +171,10 @@ Environment overrides:
 - `DEVIALETCTL_BASE_PATH`
 - `DEVIALETCTL_LOG_LEVEL`
 - `DEVIALETCTL_CEC_DEVICE`
+
+CLI target selection notes:
+- `--ip` and `--system` are mutually exclusive.
+- `list` and `tree` are discovery-only commands and reject `--ip` / `--system`.
 
 Kernel CEC permissions note:
 - the daemon user must have read/write access to `/dev/cec0` (typically via `video` group or udev rule)

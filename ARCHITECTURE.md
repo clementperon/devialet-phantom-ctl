@@ -26,12 +26,14 @@ Provide a maintainable local-control platform for Devialet Phantom volume, with:
   - `ports.py`: contracts (`VolumeGateway`, discovery target models)
 - `src/devialetctl/infrastructure`
   - `devialet_gateway.py`: async HTTP calls to Devialet API (`httpx.AsyncClient`)
-  - `mdns_gateway.py`: zeroconf discovery + filtering
+  - `mdns_gateway.py`: mDNS/zeroconf discovery + filtering
+  - `upnp_gateway.py`: SSDP/UPnP discovery (`MediaRenderer:2`)
   - `cec_adapter.py`: Linux CEC kernel adapter (`/dev/cec0`, ioctl, async event stream)
   - `keyboard_adapter.py`: single-key or line-based keyboard input
   - `config.py`: typed runtime config (TOML + env overrides)
 - `src/devialetctl/interfaces`
   - `cli.py`: argparse and command wiring
+  - `topology.py`: topology tree building/rendering and system-name target selection
 - Compatibility shims
   - `src/devialetctl/api.py`
   - `src/devialetctl/discovery.py`
@@ -62,6 +64,7 @@ flowchart LR
     keyboardAdapter[KeyboardAdapter]
     httpGateway[DevialetHttpGateway]
     mdnsGateway[MdnsDiscoveryGateway]
+    upnpGateway[UpnpDiscoveryGateway]
     configLoader[ConfigLoader]
   end
 
@@ -79,8 +82,11 @@ flowchart LR
   volumeService --> httpGateway
   httpGateway --> devialetSpeaker
   devialetSpeaker --> mdnsGateway
+  devialetSpeaker --> upnpGateway
   daemonInterface --> mdnsGateway
+  daemonInterface --> upnpGateway
   cliInterface --> mdnsGateway
+  cliInterface --> upnpGateway
   configLoader --> daemonInterface
   configLoader --> cliInterface
 ```
@@ -88,16 +94,27 @@ flowchart LR
 ## Command Surface
 
 - Direct control:
-  - `list`, `systems`, `getvol`, `setvol`, `volup`, `voldown`, `mute`
+  - `list`, `tree`, `systems`, `getvol`, `setvol`, `volup`, `voldown`, `mute`
 - Daemon:
   - `daemon --input cec`
   - `daemon --input keyboard`
 - Target selection:
-  - global args and daemon-specific target args (`--ip`, `--port`, `--base-path`, `--index`, `--discover-timeout`)
+  - global args (`--ip`, `--port`, `--system`, `--discover-timeout`)
+  - daemon-specific CEC args (`--cec-device`, `--cec-osd-name`, `--cec-vendor-compat`)
+  - `--ip` and `--system` are mutually exclusive
+  - `list` and `tree` reject `--ip` / `--system` because they are discovery-only
 
 ## Runtime Behavior
 
-- mDNS discovery filters likely Devialet devices by service identity heuristics.
+- Discovery uses merged mDNS + UPnP:
+  - mDNS path: `_whatsup._tcp.local` browsing.
+  - UPnP path: SSDP `M-SEARCH` with target `urn:schemas-upnp-org:device:MediaRenderer:2`.
+  - targets are deduplicated by `(address, port, base_path)` before selection.
+- `tree` command builds a topology from "current" endpoints:
+  - per discovered dispatcher: `/devices/current`
+  - per inferred system: `/systems/current`
+  - groups are rebuilt from `groupId`/`systemId` relationships.
+  - system-targeted selection (`--system`) prefers `isSystemLeader` when available.
 - Base path is normalized defensively:
   - `None`, `""`, `/` -> `/ipcontrol/v1`
   - missing leading slash is corrected.
@@ -153,13 +170,13 @@ sequenceDiagram
 ## Configuration Model
 
 Config source priority:
-1. CLI daemon target args (when provided)
+1. CLI global target args (when provided)
 2. Environment variables (`DEVIALETCTL_IP`, `DEVIALETCTL_PORT`, `DEVIALETCTL_BASE_PATH`)
 3. TOML config (`~/.config/devialetctl/config.toml`)
 4. built-in defaults
 
 Relevant settings:
-- target: `ip`, `port`, `base_path`, `discover_timeout`, `index`
+- target: `ip`, `port`, `base_path`, `discover_timeout`
 - daemon: `cec_device`, `cec_osd_name`, `cec_vendor_compat`, `reconnect_delay_s`, `log_level`
 - policy: `dedupe_window_s`, `min_interval_s`
 
@@ -178,8 +195,8 @@ Current test suite covers:
 - keyboard parser behavior
 - event policy dedupe/rate-limit
 - daemon routing in CEC and keyboard modes
-- CLI regressions (including daemon argument handling)
-- mDNS filtering
+- CLI regressions (including daemon argument handling and `tree --json`)
+- mDNS + UPnP discovery integration
 - base-path normalization
 - compatibility wrappers
 
