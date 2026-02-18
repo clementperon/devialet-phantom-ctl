@@ -316,6 +316,24 @@ def test_cli_daemon_rejects_ip_and_system_together(monkeypatch, capsys) -> None:
     assert "--ip and --system are not compatible" in err
 
 
+def test_cli_list_rejects_ip_override(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(sys, "argv", ["devialetctl", "--ip", "10.0.0.2", "list"])
+    with pytest.raises(SystemExit) as exc:
+        cli.main()
+    assert exc.value.code == 2
+    err = capsys.readouterr().err
+    assert "--ip is not supported with 'list'" in err
+
+
+def test_cli_tree_rejects_ip_override(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(sys, "argv", ["devialetctl", "--ip", "10.0.0.2", "tree"])
+    with pytest.raises(SystemExit) as exc:
+        cli.main()
+    assert exc.value.code == 2
+    err = capsys.readouterr().err
+    assert "--ip is not supported with 'tree'" in err
+
+
 def test_cli_list_when_empty(monkeypatch, capsys) -> None:
     class FakeDiscovery:
         def discover(self, timeout_s):

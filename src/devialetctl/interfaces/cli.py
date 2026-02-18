@@ -87,7 +87,11 @@ def _target_from_resolved(resolved: _EffectiveOptions) -> Target:
         return Target(address=resolved.ip, port=resolved.port, base_path="/ipcontrol/v1", name="manual")
     services = _discover_targets(timeout_s=resolved.discover_timeout)
     if resolved.system is not None:
-        return pick_target_by_system_name(services, resolved.system)
+        return pick_target_by_system_name(
+            services,
+            resolved.system,
+            gateway_factory=DevialetHttpGateway,
+        )
     return _pick(services)
 
 
@@ -103,6 +107,12 @@ def _validate_target_selection_args(parser: argparse.ArgumentParser, args) -> No
     if args.ip and args.system:
         parser.error(
             "--ip and --system are not compatible: --ip disables discovery while --system requires discovery."
+        )
+    if args.cmd in {"list", "tree"} and args.ip:
+        parser.error(f"--ip is not supported with '{args.cmd}': this command is discovery-based.")
+    if args.cmd in {"list", "tree"} and args.system:
+        parser.error(
+            f"--system is not supported with '{args.cmd}': this command already lists discovered systems."
         )
 
 
@@ -121,7 +131,7 @@ def _dispatch_command(args, daemon_cfg, resolved: _EffectiveOptions) -> None:
         if not services:
             print("No service detected.")
             return
-        tree = build_topology_tree(services)
+        tree = build_topology_tree(services, gateway_factory=DevialetHttpGateway)
         if args.tree_json:
             print(json.dumps(tree, indent=2, ensure_ascii=False))
             return

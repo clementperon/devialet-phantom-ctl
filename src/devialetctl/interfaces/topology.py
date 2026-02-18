@@ -54,13 +54,13 @@ def _device_row_to_dict(dev: DeviceRow) -> dict:
     }
 
 
-def build_topology_tree(targets: list[Target]) -> dict:
+def build_topology_tree(targets: list[Target], gateway_factory=DevialetHttpGateway) -> dict:
     devices_by_id: dict[str, dict] = {}
     systems: dict[str, dict] = {}
     groups: dict[str, dict] = {}
 
     for target in targets:
-        gateway = DevialetHttpGateway(target.address, target.port, target.base_path)
+        gateway = gateway_factory(target.address, target.port, target.base_path)
         device = _safe_fetch_json(gateway, "/devices/current")
         if not device:
             continue
@@ -94,7 +94,7 @@ def build_topology_tree(targets: list[Target]) -> dict:
 
     for system_id, system_data in systems.items():
         probe_device = system_data["devices"][0]
-        gateway = DevialetHttpGateway(
+        gateway = gateway_factory(
             probe_device["address"],
             probe_device["port"],
             "/ipcontrol/v1",
@@ -197,14 +197,18 @@ def render_topology_tree_lines(tree: dict) -> list[str]:
     return lines
 
 
-def pick_target_by_system_name(services: list[Target], system_name: str) -> Target:
+def pick_target_by_system_name(
+    services: list[Target],
+    system_name: str,
+    gateway_factory=DevialetHttpGateway,
+) -> Target:
     if not services:
         raise RuntimeError("No service detected via mDNS/UPnP. Check network / Wi-Fi isolation.")
     requested = system_name.strip()
     if not requested:
         raise RuntimeError("System name cannot be empty.")
 
-    tree = build_topology_tree(services)
+    tree = build_topology_tree(services, gateway_factory=gateway_factory)
     matches: list[tuple[str, dict]] = []
     for group in tree.get("groups", []):
         group_id = str(group.get("group_id", "ungrouped"))
