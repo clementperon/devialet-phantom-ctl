@@ -150,6 +150,130 @@ def test_cli_daemon_accepts_subcommand_index(monkeypatch) -> None:
     assert FakeGateway.picked_address == "10.0.0.11"
 
 
+def test_cli_getvol_accepts_system_name_selection(monkeypatch, capsys) -> None:
+    class FakeDiscovery:
+        def discover(self, timeout_s):
+            class Salon:
+                name = "salon"
+                address = "10.0.0.50"
+                port = 80
+                base_path = "/ipcontrol/v1"
+
+            class TvLeft:
+                name = "tv-left"
+                address = "10.0.0.71"
+                port = 80
+                base_path = "/ipcontrol/v1"
+
+            class TvRight:
+                name = "tv-right"
+                address = "10.0.0.184"
+                port = 80
+                base_path = "/ipcontrol/v1"
+
+            return [Salon(), TvLeft(), TvRight()]
+
+    class FakeGateway:
+        def __init__(self, address, port, base_path):
+            self.address = address
+            self.port = port
+            self.base_path = base_path
+
+        async def fetch_json_async(self, path):
+            if path == "/devices/current":
+                if self.address == "10.0.0.50":
+                    return {
+                        "deviceId": "salon-1",
+                        "systemId": "sys-salon",
+                        "groupId": "grp-salon",
+                        "deviceName": "Salon",
+                        "model": "Phantom",
+                        "role": "Mono",
+                    }
+                if self.address == "10.0.0.71":
+                    return {
+                        "deviceId": "tv-left",
+                        "systemId": "sys-tv",
+                        "groupId": "grp-tv",
+                        "deviceName": "TV Gauche",
+                        "model": "Phantom",
+                        "role": "FrontLeft",
+                    }
+                return {
+                    "deviceId": "tv-right",
+                    "systemId": "sys-tv",
+                    "groupId": "grp-tv",
+                    "deviceName": "TV Droite",
+                    "model": "Phantom",
+                    "role": "FrontRight",
+                }
+            if path == "/systems/current":
+                if self.address in {"10.0.0.71", "10.0.0.184"}:
+                    return {"systemName": "TV", "groupId": "grp-tv"}
+                return {"systemName": "Salon", "groupId": "grp-salon"}
+            return {}
+
+        async def systems_async(self):
+            return {}
+
+        async def get_volume_async(self):
+            return int(self.address.split(".")[-1])
+
+        async def set_volume_async(self, value):
+            return None
+
+        async def volume_up_async(self):
+            return None
+
+        async def volume_down_async(self):
+            return None
+
+        async def mute_toggle_async(self):
+            return None
+
+    monkeypatch.setattr(cli, "MdnsDiscoveryGateway", lambda: FakeDiscovery())
+    monkeypatch.setattr(cli, "DevialetHttpGateway", FakeGateway)
+    monkeypatch.setattr(sys, "argv", ["devialetctl", "--system", "TV", "getvol"])
+    cli.main()
+    out = capsys.readouterr().out
+    assert out.strip() in {"71", "184"}
+
+
+def test_cli_getvol_system_name_not_found(monkeypatch) -> None:
+    class FakeDiscovery:
+        def discover(self, timeout_s):
+            class Row:
+                name = "phantom"
+                address = "10.0.0.2"
+                port = 80
+                base_path = "/ipcontrol/v1"
+
+            return [Row()]
+
+    class FakeGateway:
+        def __init__(self, address, port, base_path):
+            self.address = address
+
+        async def fetch_json_async(self, path):
+            if path == "/devices/current":
+                return {
+                    "deviceId": "dev-1",
+                    "systemId": "sys-1",
+                    "groupId": "grp-1",
+                    "deviceName": "Living Room",
+                }
+            if path == "/systems/current":
+                return {"systemName": "Salon", "groupId": "grp-1"}
+            return {}
+
+    monkeypatch.setattr(cli, "MdnsDiscoveryGateway", lambda: FakeDiscovery())
+    monkeypatch.setattr(cli, "DevialetHttpGateway", FakeGateway)
+    monkeypatch.setattr(sys, "argv", ["devialetctl", "--system", "TV", "getvol"])
+    with pytest.raises(RuntimeError) as exc:
+        cli.main()
+    assert "System 'TV' not found" in str(exc.value)
+
+
 def test_cli_list_when_empty(monkeypatch, capsys) -> None:
     class FakeDiscovery:
         def discover(self, timeout_s):

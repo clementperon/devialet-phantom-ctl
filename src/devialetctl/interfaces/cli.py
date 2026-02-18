@@ -33,6 +33,49 @@ def _pick(services: list[Target], index: int | None):
     return services[index]
 
 
+def _pick_by_system_name(services: list[Target], system_name: str) -> Target:
+    if not services:
+        raise RuntimeError(
+            "No service detected via mDNS/UPnP. Check network / Wi-Fi isolation."
+        )
+    requested = system_name.strip()
+    if not requested:
+        raise RuntimeError("System name cannot be empty.")
+
+    tree = _build_topology_tree(services)
+    matches: list[tuple[str, dict]] = []
+    for group in tree.get("groups", []):
+        group_id = str(group.get("group_id", "ungrouped"))
+        for system in group.get("systems", []):
+            if str(system.get("system_name", "")).casefold() == requested.casefold():
+                matches.append((group_id, system))
+
+    if not matches:
+        raise RuntimeError(
+            f"System '{requested}' not found. Run 'devialetctl tree' to list available systems."
+        )
+    if len(matches) > 1:
+        groups = ", ".join(sorted({m[0] for m in matches}))
+        raise RuntimeError(
+            f"System name '{requested}' is ambiguous across groups: {groups}. "
+            "Use --index or rename systems."
+        )
+
+    group_id, system = matches[0]
+    devices = system.get("devices", [])
+    if not devices:
+        raise RuntimeError(
+            f"System '{requested}' has no reachable devices in group {group_id}."
+        )
+    selected = devices[0]
+    return Target(
+        address=str(selected["address"]),
+        port=int(selected["port"]),
+        base_path="/ipcontrol/v1",
+        name=f"{requested}@{group_id}",
+    )
+
+
 def _discover_targets(timeout_s: float) -> list[Target]:
     seen: set[tuple[str, int, str]] = set()
     merged: list[Target] = []
@@ -193,6 +236,7 @@ def _target_from_args(args) -> Target:
     base_path = args.base_path
     discover_timeout = args.discover_timeout
     index = args.index
+    system = args.system
 
     if getattr(args, "cmd", None) == "daemon":
         ip = args.daemon_ip if args.daemon_ip is not None else ip
@@ -204,12 +248,15 @@ def _target_from_args(args) -> Target:
             else discover_timeout
         )
         index = args.daemon_index if args.daemon_index is not None else index
+        system = args.daemon_system if args.daemon_system is not None else system
 
     if ip:
         return Target(
             address=ip, port=port, base_path=normalize_base_path(base_path), name="manual"
         )
     services = _discover_targets(timeout_s=discover_timeout)
+    if system is not None:
+        return _pick_by_system_name(services, system)
     return _pick(services, index)
 
 
@@ -237,6 +284,9 @@ def _target_from_config(args) -> Target:
         if args.daemon_discover_timeout is not None
         else cfg.target.discover_timeout
     )
+    if args.daemon_system is not None:
+        services = _discover_targets(timeout_s=timeout)
+        return _pick_by_system_name(services, args.daemon_system)
     index = args.daemon_index if args.daemon_index is not None else cfg.target.index
     services = _discover_targets(timeout_s=timeout)
     return _pick(services, index)
@@ -262,6 +312,7 @@ def main() -> None:
     )
     p.add_argument("--discover-timeout", type=float, default=3.0)
     p.add_argument("--index", type=int, default=None)
+    p.add_argument("--system", type=str, default=None, help="System name from 'tree' output.")
     p.add_argument("--ip", type=str, default=None, help="Manual IP (bypass discovery)")
     p.add_argument("--port", type=int, default=80)
     p.add_argument("--base-path", type=str, default="/ipcontrol/v1")
@@ -285,6 +336,7 @@ def main() -> None:
         "--discover-timeout", dest="daemon_discover_timeout", type=float, default=None
     )
     daemon.add_argument("--index", dest="daemon_index", type=int, default=None)
+    daemon.add_argument("--system", dest="daemon_system", type=str, default=None)
     daemon.add_argument("--ip", dest="daemon_ip", type=str, default=None)
     daemon.add_argument("--port", dest="daemon_port", type=int, default=None)
     daemon.add_argument("--base-path", dest="daemon_base_path", type=str, default=None)
