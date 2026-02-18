@@ -107,3 +107,8 @@ def test_format_human_readable_samsung_vendor_model_name() -> None:
     text = format_cec_frame_human("05:89:88:12:34")
     assert "SAMSUNG_VENDOR_COMMAND (MODEL_NAME)" in text
     assert "payload=88:12:34" in text
+
+
+def test_format_human_readable_standby_opcode() -> None:
+    text = format_cec_frame_human("0F:36")
+    assert "TV -> Broadcast : STANDBY" in text

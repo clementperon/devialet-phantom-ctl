@@ -44,6 +44,7 @@ _LOGICAL_ADDRESS_NAMES: dict[int, str] = {
 
 _CEC_OPCODE_NAMES: dict[str, str] = {
     "00": "FEATURE_ABORT",
+    "36": "STANDBY",
     "44": "USER_CONTROL_PRESSED",
     "45": "USER_CONTROL_RELEASED",
     "46": "GIVE_OSD_NAME",
