@@ -44,9 +44,7 @@ def _effective_options(args, cfg) -> _EffectiveOptions:
 
 def _pick(services: list[Target]) -> Target:
     if not services:
-        raise RuntimeError(
-            "No service detected via mDNS/UPnP. Check network / Wi-Fi isolation."
-        )
+        raise RuntimeError("No service detected via mDNS/UPnP. Check network / Wi-Fi isolation.")
     if len(services) == 1:
         return services[0]
     for i, s in enumerate(services):
