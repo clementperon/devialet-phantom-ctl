@@ -77,6 +77,7 @@ _USER_CONTROL_KEYCODE_MAP: dict[str, tuple[InputEventType, str]] = {
 }
 
 _SYSTEM_REQUEST_OPCODE_MAP: dict[str, tuple[InputEventType, str]] = {
+    "46": (InputEventType.GIVE_OSD_NAME, "GIVE_OSD_NAME"),
     "70": (InputEventType.SYSTEM_AUDIO_MODE_REQUEST, "SYSTEM_AUDIO_MODE_REQUEST"),
     "7D": (InputEventType.GIVE_SYSTEM_AUDIO_MODE_STATUS, "GIVE_SYSTEM_AUDIO_MODE_STATUS"),
     "C3": (InputEventType.REQUEST_ARC_INITIATION, "REQUEST_ARC_INITIATION"),
@@ -86,7 +87,7 @@ _SYSTEM_REQUEST_OPCODE_MAP: dict[str, tuple[InputEventType, str]] = {
         "REQUEST_SHORT_AUDIO_DESCRIPTOR",
     ),
     "8C": (InputEventType.GIVE_DEVICE_VENDOR_ID, "GIVE_DEVICE_VENDOR_ID"),
-    "46": (InputEventType.GIVE_OSD_NAME, "GIVE_OSD_NAME"),
+    "8F": (InputEventType.GIVE_DEVICE_POWER_STATUS, "GIVE_DEVICE_POWER_STATUS"),
 }
 
 
@@ -392,7 +393,7 @@ class CecKernelAdapter:
             return False
         upper_frame = frame.upper()
         LOG.info("CEC TX frame: %s", upper_frame)
-        LOG.debug("CEC TX decoded: %s -> %s", upper_frame, format_cec_frame_human(upper_frame))
+        LOG.info("CEC TX decoded: %s -> %s", upper_frame, format_cec_frame_human(upper_frame))
         try:
             msg = self._msg_from_frame(upper_frame)
             fcntl.ioctl(fd, CEC_TRANSMIT, msg)

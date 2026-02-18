@@ -33,6 +33,7 @@ _CEC_SYSTEM_RESPONSE_MAP: dict[InputEventType, _CecSystemFrameBuilder] = {
     # REPORT_SHORT_AUDIO_DESCRIPTOR with one valid LPCM SAD:
     # format=LPCM (1), channels=2, rates=32/44.1/48kHz, sizes=16/20/24bit
     InputEventType.REQUEST_SHORT_AUDIO_DESCRIPTOR: _fixed_system_frame("50:A3:09:07:07"),
+    InputEventType.GIVE_DEVICE_POWER_STATUS: _fixed_system_frame("50:90:00"),
     InputEventType.GIVE_DEVICE_VENDOR_ID: (
         lambda runner, adapter: runner._vendor_response_frame(adapter)
     ),

@@ -34,6 +34,7 @@ def test_parse_cec_system_audio_and_arc_requests() -> None:
     arc_init = parse_cec_frame("05:c3")
     arc_term = parse_cec_frame("05:c4")
     sad_req = parse_cec_frame("05:a4:02:0a")
+    give_power = parse_cec_frame("05:8f")
     give_vendor = parse_cec_frame("05:8c")
     give_osd = parse_cec_frame("05:46")
     assert (
@@ -46,6 +47,7 @@ def test_parse_cec_system_audio_and_arc_requests() -> None:
     assert arc_init is not None and arc_init.kind == InputEventType.REQUEST_ARC_INITIATION
     assert arc_term is not None and arc_term.kind == InputEventType.REQUEST_ARC_TERMINATION
     assert sad_req is not None and sad_req.kind == InputEventType.REQUEST_SHORT_AUDIO_DESCRIPTOR
+    assert give_power is not None and give_power.kind == InputEventType.GIVE_DEVICE_POWER_STATUS
     assert give_vendor is not None and give_vendor.kind == InputEventType.GIVE_DEVICE_VENDOR_ID
     assert give_osd is not None and give_osd.kind == InputEventType.GIVE_OSD_NAME
 

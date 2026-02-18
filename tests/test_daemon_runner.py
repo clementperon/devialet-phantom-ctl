@@ -201,6 +201,11 @@ def test_daemon_runner_replies_system_audio_and_arc_requests(monkeypatch) -> Non
                 key="REQUEST_SHORT_AUDIO_DESCRIPTOR",
             )
             yield InputEvent(
+                kind=InputEventType.GIVE_DEVICE_POWER_STATUS,
+                source="cec",
+                key="GIVE_DEVICE_POWER_STATUS",
+            )
+            yield InputEvent(
                 kind=InputEventType.GIVE_DEVICE_VENDOR_ID,
                 source="cec",
                 key="GIVE_DEVICE_VENDOR_ID",
@@ -230,6 +235,7 @@ def test_daemon_runner_replies_system_audio_and_arc_requests(monkeypatch) -> Non
         "50:C0",
         "50:C5",
         "50:A3:09:07:07",
+        "50:90:00",
         "50:87:12:34:56",
         "50:47:44:65:76:69:61:6C:65:74",
     ]
