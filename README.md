@@ -113,7 +113,7 @@ Run daemon in a container (CEC mode):
 docker run --rm -it \
   --network host \
   --device /dev/cec0:/dev/cec0 \
-  ghcr.io/<owner>/<repo>:latest \
+  ghcr.io/clementperon/devialet-phantom-ctl:latest \
   --system "TV" daemon --input cec --cec-vendor-compat="samsung"
 ```
 
