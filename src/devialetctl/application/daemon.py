@@ -14,6 +14,7 @@ from devialetctl.infrastructure.keyboard_adapter import KeyboardAdapter
 
 LOG = logging.getLogger(__name__)
 _SAMSUNG_VENDOR_92_SUPPORTED_MODES = {0x01, 0x03, 0x04, 0x05, 0x06}
+_SAMSUNG_MODEL_NAME = "Devialet"
 _VENDOR_COMPAT_VENDOR_ID: dict[str, int] = {
     "samsung": 0x0000F0,
 }
@@ -33,6 +34,7 @@ _CEC_SYSTEM_RESPONSE_MAP: dict[InputEventType, _CecSystemFrameBuilder] = {
     # REPORT_SHORT_AUDIO_DESCRIPTOR with one valid LPCM SAD:
     # format=LPCM (1), channels=2, rates=32/44.1/48kHz, sizes=16/20/24bit
     InputEventType.REQUEST_SHORT_AUDIO_DESCRIPTOR: _fixed_system_frame("50:A3:09:07:07"),
+    InputEventType.GIVE_DEVICE_POWER_STATUS: _fixed_system_frame("50:90:00"),
     InputEventType.GIVE_DEVICE_VENDOR_ID: (
         lambda runner, adapter: runner._vendor_response_frame(adapter)
     ),
@@ -249,9 +251,21 @@ class DaemonRunner:
                 LOG.debug("ignored Samsung vendor 0x92 unsupported mode payload=%s", payload)
             return
 
-        if subcommand in {0x88, 0x96}:
-            LOG.debug("handled Samsung vendor subcommand=0x%02X payload=%s", subcommand, payload)
-            if subcommand == 0x96 and len(payload) >= 2:
+        if subcommand == 0x88:
+            model_name = _SAMSUNG_MODEL_NAME.encode("ascii", errors="ignore")[:14]
+            if model_name:
+                frame = "50:89:88:" + ":".join(f"{byte:02X}" for byte in model_name)
+                sent = self._send_tx(adapter, frame)
+                if sent:
+                    LOG.debug("sent Samsung model-name response frame: %s", frame)
+                else:
+                    LOG.debug("cannot send Samsung model-name response frame: %s", frame)
+            LOG.debug("handled Samsung vendor subcommand=0x88 payload=%s", payload)
+            return
+
+        if subcommand == 0x96:
+            LOG.debug("handled Samsung vendor subcommand=0x96 payload=%s", payload)
+            if len(payload) >= 2:
                 candidate = payload[-1]
                 if 0 <= candidate <= 100:
                     current = self._cached_volume

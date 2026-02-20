@@ -201,6 +201,11 @@ def test_daemon_runner_replies_system_audio_and_arc_requests(monkeypatch) -> Non
                 key="REQUEST_SHORT_AUDIO_DESCRIPTOR",
             )
             yield InputEvent(
+                kind=InputEventType.GIVE_DEVICE_POWER_STATUS,
+                source="cec",
+                key="GIVE_DEVICE_POWER_STATUS",
+            )
+            yield InputEvent(
                 kind=InputEventType.GIVE_DEVICE_VENDOR_ID,
                 source="cec",
                 key="GIVE_DEVICE_VENDOR_ID",
@@ -230,6 +235,7 @@ def test_daemon_runner_replies_system_audio_and_arc_requests(monkeypatch) -> Non
         "50:C0",
         "50:C5",
         "50:A3:09:07:07",
+        "50:90:00",
         "50:87:12:34:56",
         "50:47:44:65:76:69:61:6C:65:74",
     ]
@@ -477,6 +483,67 @@ def test_daemon_runner_replies_samsung_vendor_95(monkeypatch) -> None:
         pass
 
     assert sent_frames == ["50:89:95:01:14"]
+
+
+def test_daemon_runner_replies_samsung_vendor_88_model_name(monkeypatch) -> None:
+    class FakeGateway:
+        async def systems_async(self):
+            return {}
+
+        async def get_volume_async(self):
+            return 43
+
+        async def get_mute_state_async(self):
+            return False
+
+        async def set_volume_async(self, volume):
+            return None
+
+        async def volume_up_async(self):
+            return None
+
+        async def volume_down_async(self):
+            return None
+
+        async def mute_toggle_async(self):
+            return None
+
+    from devialetctl.domain.events import InputEvent, InputEventType
+
+    sent_frames: list[str] = []
+
+    class OneShotAdapter:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        async def async_events(self):
+            yield InputEvent(
+                kind=InputEventType.SAMSUNG_VENDOR_COMMAND,
+                source="cec",
+                key="SAMSUNG_VENDOR_COMMAND",
+                vendor_subcommand=0x88,
+                vendor_payload=(0x88,),
+            )
+            raise KeyboardInterrupt()
+
+        def send_tx(self, frame: str) -> bool:
+            sent_frames.append(frame)
+            return True
+
+    monkeypatch.setattr("devialetctl.application.daemon.CecKernelAdapter", OneShotAdapter)
+    cfg = DaemonConfig(
+        target=RuntimeTarget(ip="10.0.0.2"),
+        min_interval_s=0.0,
+        dedupe_window_s=0.0,
+        cec_vendor_compat="samsung",
+    )
+    runner = DaemonRunner(cfg=cfg, gateway=FakeGateway())
+    try:
+        runner.run_cec_forever()
+    except KeyboardInterrupt:
+        pass
+
+    assert sent_frames == ["50:89:88:44:65:76:69:61:6C:65:74"]
 
 
 def test_daemon_runner_ignores_samsung_vendor_when_compat_disabled(monkeypatch) -> None:
