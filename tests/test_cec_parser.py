@@ -88,6 +88,10 @@ def test_parse_samsung_vendor_a0_with_id() -> None:
     ("frame", "expected_fragment"),
     [
         ("05:89:96:19", "SAMSUNG_VENDOR_COMMAND (SYNC_TV_VOLUME) payload=96:19"),
+        (
+            "05:89:92:26:91:00:00:00",
+            "SAMSUNG_VENDOR_COMMAND (Q_SYMPHONY_MODE_CONFIG_UPDATE) payload=92:26:91:00:00:00",
+        ),
         ("05:89:88:12:34", "SAMSUNG_VENDOR_COMMAND (MODEL_NAME) payload=88:12:34"),
         ("0F:36", "TV -> Broadcast : STANDBY"),
         ("0F:80:00:00:10:00", "TV -> Broadcast : ROUTING_CHANGE payload=00:00:10:00"),
