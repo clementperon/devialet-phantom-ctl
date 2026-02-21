@@ -546,6 +546,68 @@ def test_daemon_runner_replies_samsung_vendor_88_model_name(monkeypatch) -> None
     assert sent_frames == ["50:89:88:44:65:76:69:61:6C:65:74"]
 
 
+def test_daemon_runner_replies_samsung_vendor_92_tv_ready_with_current_volume(monkeypatch) -> None:
+    class FakeGateway:
+        async def systems_async(self):
+            return {}
+
+        async def get_volume_async(self):
+            return 43
+
+        async def get_mute_state_async(self):
+            return False
+
+        async def set_volume_async(self, volume):
+            return None
+
+        async def volume_up_async(self):
+            return None
+
+        async def volume_down_async(self):
+            return None
+
+        async def mute_toggle_async(self):
+            return None
+
+    from devialetctl.domain.events import InputEvent, InputEventType
+
+    sent_frames: list[str] = []
+
+    class OneShotAdapter:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        async def async_events(self):
+            yield InputEvent(
+                kind=InputEventType.SAMSUNG_VENDOR_COMMAND,
+                source="cec",
+                key="SAMSUNG_VENDOR_COMMAND",
+                vendor_subcommand=0x92,
+                vendor_mode=0x03,
+                vendor_payload=(0x92, 0x03, 0x00, 0x00, 0x00, 0x00),
+            )
+            raise KeyboardInterrupt()
+
+        def send_tx(self, frame: str) -> bool:
+            sent_frames.append(frame)
+            return True
+
+    monkeypatch.setattr("devialetctl.application.daemon.CecKernelAdapter", OneShotAdapter)
+    cfg = DaemonConfig(
+        target=RuntimeTarget(ip="10.0.0.2"),
+        min_interval_s=0.0,
+        dedupe_window_s=0.0,
+        cec_vendor_compat="samsung",
+    )
+    runner = DaemonRunner(cfg=cfg, gateway=FakeGateway())
+    try:
+        runner.run_cec_forever()
+    except KeyboardInterrupt:
+        pass
+
+    assert sent_frames == ["50:89:95:01:2B"]
+
+
 def test_daemon_runner_ignores_samsung_vendor_when_compat_disabled(monkeypatch) -> None:
     class FakeGateway:
         def __init__(self):

@@ -246,6 +246,15 @@ class DaemonRunner:
         if subcommand == 0x92:
             mode = event.vendor_mode
             if mode in _SAMSUNG_VENDOR_92_SUPPORTED_MODES:
+                if mode == 0x03:
+                    volume, _muted = await self._get_audio_state_async()
+                    self._sync_vendor_state_from_volume(volume)
+                    frame = f"50:89:95:01:{self._vendor_state_byte:02X}"
+                    sent = self._send_tx(adapter, frame)
+                    if sent:
+                        LOG.debug("sent Samsung TV_READY volume-sync response frame: %s", frame)
+                    else:
+                        LOG.debug("cannot send Samsung TV_READY volume-sync response frame: %s", frame)
                 LOG.debug("handled Samsung vendor 0x92 mode=0x%02X payload=%s", mode, payload)
             else:
                 LOG.debug("ignored Samsung vendor 0x92 unsupported mode payload=%s", payload)
