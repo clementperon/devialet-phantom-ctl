@@ -275,6 +275,19 @@ class DaemonRunner:
                     self._cached_volume = candidate
             return
 
+        if subcommand == 0xA2:
+            # Samsung "second-depth device status": reply with empty/default state.
+            frame = "50:89:A3:00"
+            sent = self._send_tx(adapter, frame)
+            if sent:
+                LOG.debug("sent Samsung second-depth status default response frame: %s", frame)
+            else:
+                LOG.debug(
+                    "cannot send Samsung second-depth status default response frame: %s",
+                    frame,
+                )
+            return
+
         LOG.debug("ignored Samsung vendor subcommand=0x%02X payload=%s", subcommand, payload)
 
     def _handle_samsung_vendor_command_with_id(self, event: InputEvent) -> None:

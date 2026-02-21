@@ -92,6 +92,14 @@ def test_parse_samsung_vendor_a0_with_id() -> None:
             "05:89:92:26:91:00:00:00",
             "SAMSUNG_VENDOR_COMMAND (Q_SYMPHONY_MODE_CONFIG_UPDATE) payload=92:26:91:00:00:00",
         ),
+        (
+            "05:89:A2:FF",
+            "SAMSUNG_VENDOR_COMMAND (SECOND_DEPTH_DEVICE_STATUS_REQUEST) payload=A2:FF",
+        ),
+        (
+            "50:89:A3:00",
+            "SAMSUNG_VENDOR_COMMAND (SECOND_DEPTH_DEVICE_STATUS_RESPONSE) payload=A3:00",
+        ),
         ("05:89:88:12:34", "SAMSUNG_VENDOR_COMMAND (MODEL_NAME) payload=88:12:34"),
         ("0F:36", "TV -> Broadcast : STANDBY"),
         ("0F:80:00:00:10:00", "TV -> Broadcast : ROUTING_CHANGE payload=00:00:10:00"),
