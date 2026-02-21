@@ -266,7 +266,13 @@ def format_cec_frame_human(frame: str) -> str:
         opcode_name = _CEC_OPCODE_NAMES.get(opcode, f"OPCODE_0x{opcode}")
     payload = ""
     if len(parts) > 2:
-        payload = f" payload={':'.join(parts[2:])}"
+        payload_str = ":".join(parts[2:])
+        payload = f" payload={payload_str}"
+        if opcode in {"72", "7E"}:
+            mode = parts[2]
+            mode_text = {"00": "OFF", "01": "ON"}.get(mode)
+            if mode_text is not None:
+                payload = f"{payload} ({mode_text})"
     return f"{initiator_name} -> {destination_name} : {opcode_name}{payload}"
 
 

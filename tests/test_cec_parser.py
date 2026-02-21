@@ -104,6 +104,8 @@ def test_parse_samsung_vendor_a0_with_id() -> None:
         ("0F:36", "TV -> Broadcast : STANDBY"),
         ("0F:80:00:00:10:00", "TV -> Broadcast : ROUTING_CHANGE payload=00:00:10:00"),
         ("0F:86:10:00", "TV -> Broadcast : SET_STREAM_PATH payload=10:00"),
+        ("50:72:01", "SET_SYSTEM_AUDIO_MODE payload=01 (ON)"),
+        ("50:7E:00", "SYSTEM_AUDIO_MODE_STATUS payload=00 (OFF)"),
     ],
 )
 def test_format_human_readable_variants(frame: str, expected_fragment: str) -> None:
