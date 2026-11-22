@@ -73,12 +73,18 @@ _CEC_OPCODE_NAMES: dict[str, str] = {
     "C5": "TERMINATE_ARC",
 }
 
+# Names follow the Samsung TV hdmicec-service handlers (S95F, Tizen 9).
 _SAMSUNG_VENDOR_SUBCOMMAND_NAMES: dict[int, str] = {
+    0x87: "SET_SOUND_MODE",
     0x88: "MODEL_NAME",
-    0x92: "MODE_UPDATE",
+    0x91: "RECEIVER_OPTION_DATA_TO_TV",
+    0x92: "RECEIVER_OPTION_DATA",
     0x95: "SYNC_TV_VOLUME_REQUEST",
     0x96: "SYNC_TV_VOLUME",
-    0xA2: "VENDOR_0xA2",
+    0xA2: "GIVE_2ND_DEPTH_DEVICE_STATUS",
+    0xA3: "REPORT_2ND_DEPTH_DEVICE_STATUS",
+    0xA5: "SOUNDBAR_DISCONNECTION_REASON",
+    0xA6: "MODEL_NAME_V2",
 }
 
 _USER_CONTROL_KEYCODE_MAP: dict[str, tuple[InputEventType, str]] = {
@@ -205,14 +211,11 @@ def parse_cec_frame(frame: str, source: str = "cec") -> InputEvent | None:
     # Samsung vendor command: <srcdst>:89:<subcommand>:...
     if len(parts) >= 3 and parts[1] == "89":
         payload = tuple(int(p, 16) for p in parts[2:])
-        subcommand = payload[0]
-        mode = payload[1] if subcommand == 0x92 and len(payload) >= 2 else None
         return InputEvent(
             kind=InputEventType.SAMSUNG_VENDOR_COMMAND,
             source=source,
             key="SAMSUNG_VENDOR_COMMAND",
-            vendor_subcommand=subcommand,
-            vendor_mode=mode,
+            vendor_subcommand=payload[0],
             vendor_payload=payload,
         )
     # Samsung vendor command with ID: <srcdst>:A0:...

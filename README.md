@@ -100,8 +100,12 @@ The daemon:
 - optionally announces `DEVICE_VENDOR_ID` (`0x87`) from Audio System when vendor compat requires spoofing
 - with `cec_vendor_compat = "samsung"`, handles Samsung vendor command `0x89`:
   - `0x95` (`SYNC_TV_VOLUME`) -> replies `50:89:95:01:XX`
-  - unknown/unsupported subcommands -> no response
-- with `cec_vendor_compat = "samsung"`, consumes Samsung vendor command-with-id `0xA0` with no-response policy for unknown payloads
+  - `0x96` (`SYNC_TV_VOLUME`, absolute volume) -> applies it, no response
+  - `0x88` (`MODEL_NAME`) -> replies `50:89:88:<name>` (the TV keeps at most 13 bytes)
+  - `0xA2` (`GIVE_2ND_DEPTH_DEVICE_STATUS`) -> replies `50:89:A3:00` (nothing behind the soundbar's HDMI inputs)
+  - `0x92` (receiver option data from a TV app), `0x87` (sound mode) and other subcommands -> no response
+- with `cec_vendor_compat = "samsung"`, consumes Samsung vendor command-with-id `0xA0` (e.g. `00:00:F0:21` device capability query) without responding; the TV times out and keeps using `0x88`
+- the TV only uses these vendor commands with devices that report vendor ID `00:00:F0`
 - applies absolute volume from TV `SET_AUDIO_VOLUME_LEVEL` (`0x73`)
 - sends updated `REPORT_AUDIO_STATUS` (`0x7A`) after handled volume/mute events
 - applies dedupe/rate-limit policy

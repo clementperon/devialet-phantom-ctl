@@ -13,8 +13,9 @@ from devialetctl.infrastructure.devialet_gateway import DevialetHttpGateway
 from devialetctl.infrastructure.keyboard_adapter import KeyboardAdapter
 
 LOG = logging.getLogger(__name__)
-_SAMSUNG_VENDOR_92_SUPPORTED_MODES = {0x01, 0x03, 0x04, 0x05, 0x06}
 _SAMSUNG_MODEL_NAME = "Devialet"
+# The TV stores at most 13 bytes of the 0x88 model-name reply.
+_SAMSUNG_MODEL_NAME_MAX_LEN = 13
 _VENDOR_COMPAT_VENDOR_ID: dict[str, int] = {
     "samsung": 0x0000F0,
 }
@@ -243,16 +244,21 @@ class DaemonRunner:
                 LOG.debug("cannot send Samsung vendor sync response frame: %s", frame)
             return
 
-        if subcommand == 0x92:
-            mode = event.vendor_mode
-            if mode in _SAMSUNG_VENDOR_92_SUPPORTED_MODES:
-                LOG.debug("handled Samsung vendor 0x92 mode=0x%02X payload=%s", mode, payload)
+        if subcommand == 0xA2:
+            # Give 2nd-depth device status: what is plugged into the soundbar's
+            # own HDMI inputs. Nothing, so report 0; unanswered, the TV retries.
+            frame = "50:89:A3:00"
+            sent = self._send_tx(adapter, frame)
+            if sent:
+                LOG.debug("sent Samsung 2nd-depth status response frame: %s", frame)
             else:
-                LOG.debug("ignored Samsung vendor 0x92 unsupported mode payload=%s", payload)
+                LOG.debug("cannot send Samsung 2nd-depth status response frame: %s", frame)
             return
 
         if subcommand == 0x88:
-            model_name = _SAMSUNG_MODEL_NAME.encode("ascii", errors="ignore")[:14]
+            model_name = _SAMSUNG_MODEL_NAME.encode("ascii", errors="ignore")[
+                :_SAMSUNG_MODEL_NAME_MAX_LEN
+            ]
             if model_name:
                 frame = "50:89:88:" + ":".join(f"{byte:02X}" for byte in model_name)
                 sent = self._send_tx(adapter, frame)
@@ -278,8 +284,8 @@ class DaemonRunner:
         LOG.debug("ignored Samsung vendor subcommand=0x%02X payload=%s", subcommand, payload)
 
     def _handle_samsung_vendor_command_with_id(self, event: InputEvent) -> None:
-        # Minimal emulation policy from reverse engineering notes:
-        # unknown A0 payloads are ignored (no explicit response).
+        # The TV sends 00:00:F0:21 (give device capability) to Samsung-vendor
+        # devices. Unanswered, it times out and keeps using 0x88 for the name.
         LOG.debug("ignored Samsung vendor command-with-id payload=%s", event.vendor_payload)
 
     async def _get_audio_state_async(self) -> tuple[int, bool]:
