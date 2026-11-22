@@ -14,6 +14,7 @@ Use cases:
 
 - mDNS discovery (`_whatsup._tcp.local`) merged with UPnP discovery
 - volume commands: `getvol`, `setvol`, `volup`, `voldown`, `mute`
+- per-source audio latency (lip sync): `getlatency`, `setlatency`
 - target selection with `--system <name>` (preferred for multi-device setups)
 - manual target override (`--ip`, `--port`)
 - long-running daemon mode (`daemon --input cec`)
@@ -75,6 +76,18 @@ Use system-name target selection (from `tree` output):
 ```bash
 uv run devialetctl --system "TV" getvol
 ```
+
+Audio latency (lip sync), per source, in ms:
+
+```bash
+uv run devialetctl --system "TV" getlatency                     # all sources
+uv run devialetctl --system "TV" getlatency --source optical
+uv run devialetctl --system "TV" setlatency 60 --source optical
+```
+
+- `--source` takes `current` (the playing source; default for `setlatency`), a source type such as `optical`, or a source id. A type matches that source on every speaker of the system (e.g. both optical inputs of a stereo pair) and they are all set.
+- `manual` sources report their range: optical 60-1000 ms, Bluetooth/UPnP/Spotify Connect 160-1000 ms (DOS 2.21). `auto` sources (AirPlay, Roon) cannot be set.
+- Uses `GET`/`POST /groups/current/sources/{sourceId}/configuration/latency` (`{"latency": <ms>}`), not part of the published IP Control revision 1.
 
 ## Daemon (CEC Input)
 

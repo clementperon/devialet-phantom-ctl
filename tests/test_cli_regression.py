@@ -602,3 +602,70 @@ def test_cli_daemon_handles_keyboard_interrupt(monkeypatch) -> None:
     monkeypatch.setattr(sys, "argv", ["devialetctl", "daemon", "--input", "keyboard"])
 
     cli.main()
+
+
+def _latency_cli_setup(monkeypatch, argv):
+    class FakeDiscovery:
+        def discover(self, timeout_s):
+            class Row:
+                name = "phantom"
+                address = "10.0.0.2"
+                port = 80
+                base_path = "/ipcontrol/v1"
+
+            return [Row()]
+
+    class FakeLatencyService:
+        calls = []
+
+        def __init__(self, gateway):
+            self.gateway = gateway
+
+        def get(self, selector=None):
+            FakeLatencyService.calls.append(("get", selector))
+            return [_FakeEntry("optical 160 ms")]
+
+        def set(self, selector, value):
+            FakeLatencyService.calls.append(("set", selector, value))
+            if value < 60:
+                raise ValueError("optical latency must be within 60-1000 ms")
+            return [_FakeEntry(f"optical {value} ms")]
+
+    monkeypatch.setattr(cli, "MdnsDiscoveryGateway", lambda: FakeDiscovery())
+    monkeypatch.setattr(cli, "DevialetHttpGateway", lambda address, port, base_path: object())
+    monkeypatch.setattr(cli, "LatencyService", FakeLatencyService)
+    monkeypatch.setattr(sys, "argv", argv)
+    return FakeLatencyService
+
+
+class _FakeEntry:
+    def __init__(self, text):
+        self.text = text
+
+    def describe(self):
+        return self.text
+
+
+def test_cli_getlatency_defaults_to_all_sources(monkeypatch, capsys) -> None:
+    service = _latency_cli_setup(monkeypatch, ["devialetctl", "getlatency"])
+    cli.main()
+    assert capsys.readouterr().out.strip() == "optical 160 ms"
+    assert service.calls == [("get", None)]
+
+
+def test_cli_setlatency_with_source(monkeypatch, capsys) -> None:
+    service = _latency_cli_setup(
+        monkeypatch, ["devialetctl", "setlatency", "60", "--source", "optical"]
+    )
+    cli.main()
+    assert capsys.readouterr().out.strip() == "optical 60 ms"
+    assert service.calls == [("set", "optical", 60)]
+
+
+def test_cli_setlatency_defaults_to_current_and_reports_errors(monkeypatch, capsys) -> None:
+    service = _latency_cli_setup(monkeypatch, ["devialetctl", "setlatency", "20"])
+    with pytest.raises(SystemExit) as exc:
+        cli.main()
+    assert exc.value.code == 2
+    assert "within 60-1000 ms" in capsys.readouterr().err
+    assert service.calls == [("set", "current", 20)]
