@@ -29,5 +29,4 @@ class InputEvent:
     value: int | None = None
     muted: bool | None = None
     vendor_subcommand: int | None = None
-    vendor_mode: int | None = None
     vendor_payload: tuple[int, ...] | None = None
