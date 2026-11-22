@@ -4,6 +4,15 @@ import time
 from typing import Callable
 
 from devialetctl.application.router import EventRouter
+from devialetctl.application.samsung_ssc import (
+    SOUND_MODE_NAMES,
+    SOUND_MODE_NIGHT,
+    SOUND_MODE_STANDARD,
+    SSC_FROM_TV,
+    SamsungSscSession,
+    handshake_frames,
+    sound_mode_frame,
+)
 from devialetctl.application.service import VolumeService
 from devialetctl.domain.events import InputEvent, InputEventType
 from devialetctl.domain.policy import EventPolicy
@@ -54,6 +63,15 @@ class DaemonRunner:
         self._cached_volume: int | None = None
         self._cached_muted: bool | None = None
         self._vendor_state_byte: int = 0x14
+        self._ssc: SamsungSscSession | None = None
+        self._ssc_night_mode: bool | None = None
+        self._ssc_night_poll_interval_s = 5.0
+        self._ssc_night_poll_at = 0.0
+        if cfg.samsung_ssc:
+            if cfg.cec_vendor_compat == "samsung":
+                self._ssc = SamsungSscSession()
+            else:
+                LOG.warning("samsung_ssc needs cec_vendor_compat = 'samsung'; ignoring it")
         self.router = EventRouter(
             service=VolumeService(gateway),
             policy=EventPolicy(
@@ -281,7 +299,70 @@ class DaemonRunner:
                     self._cached_volume = candidate
             return
 
+        if subcommand == SSC_FROM_TV and self._ssc is not None:
+            action = self._ssc.handle_tv_message(payload)
+            if action.send_handshake:
+                await self._send_ssc_handshake_async(adapter)
+            if action.sound_mode is not None:
+                await self._apply_ssc_sound_mode_async(action.sound_mode)
+            return
+
         LOG.debug("ignored Samsung vendor subcommand=0x%02X payload=%s", subcommand, payload)
+
+    async def _send_ssc_handshake_async(self, adapter: CecKernelAdapter) -> None:
+        try:
+            self._ssc_night_mode = await self.gateway.get_night_mode_async()
+        except Exception as exc:
+            LOG.debug("cannot read Devialet night mode for the SSC handshake: %s", exc)
+            self._ssc_night_mode = None
+        mode = SOUND_MODE_NIGHT if self._ssc_night_mode else SOUND_MODE_STANDARD
+        for frame in handshake_frames(sound_mode=mode):
+            if not self._send_tx(adapter, frame):
+                LOG.debug("cannot send Samsung SSC frame: %s", frame)
+                return
+
+    async def _apply_ssc_sound_mode_async(self, mode: int) -> None:
+        if mode not in (SOUND_MODE_STANDARD, SOUND_MODE_NIGHT):
+            LOG.info(
+                "Samsung SSC: sound mode %d (%s) has no Devialet equivalent; ignored",
+                mode,
+                SOUND_MODE_NAMES.get(mode, "unknown"),
+            )
+            return
+        night = mode == SOUND_MODE_NIGHT
+        try:
+            await self.gateway.set_night_mode_async(night)
+        except Exception as exc:
+            LOG.warning("cannot set Devialet night mode to %s: %s", night, exc)
+            return
+        self._ssc_night_mode = night
+        LOG.info("Samsung SSC: Devialet night mode %s", "on" if night else "off")
+
+    async def _poll_ssc_night_mode_once_async(self, adapter: CecKernelAdapter) -> None:
+        """Mirror night-mode changes made outside the TV (e.g. Devialet app)."""
+        if self._ssc is None or not self._ssc.protocol_confirmed:
+            return
+        now = time.monotonic()
+        if now < self._ssc_night_poll_at:
+            return
+        self._ssc_night_poll_at = now + self._ssc_night_poll_interval_s
+        async with self._require_io_lock():
+            if self._is_external_watch_suspended():
+                return
+            try:
+                night = await self.gateway.get_night_mode_async()
+            except Exception as exc:
+                LOG.debug("Devialet night-mode polling failed: %s", exc)
+                return
+            if night == self._ssc_night_mode:
+                return
+            self._ssc_night_mode = night
+            mode = SOUND_MODE_NIGHT if night else SOUND_MODE_STANDARD
+            LOG.info(
+                "Devialet night mode changed outside the TV (%s); updating the TV",
+                "on" if night else "off",
+            )
+            self._send_tx(adapter, sound_mode_frame(mode))
 
     def _handle_samsung_vendor_command_with_id(self, event: InputEvent) -> None:
         # The TV sends 00:00:F0:21 (give device capability) to Samsung-vendor
@@ -345,6 +426,7 @@ class DaemonRunner:
                         volume,
                         muted,
                     )
+            await self._poll_ssc_night_mode_once_async(adapter)
             await asyncio.sleep(self._external_watch_interval_s)
 
     async def _poll_external_audio_state_once_async(self) -> tuple[bool, int, bool]:

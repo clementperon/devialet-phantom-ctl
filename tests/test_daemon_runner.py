@@ -970,3 +970,191 @@ def test_external_watcher_is_suspended_during_cec_push_window() -> None:
     assert muted is False
     assert gw.get_volume_calls == 0
     assert gw.get_mute_calls == 0
+
+
+class _SscFakeGateway:
+    def __init__(self, night_mode: bool = False, fail_night: bool = False) -> None:
+        self.night_mode = night_mode
+        self.fail_night = fail_night
+        self.night_mode_sets: list[bool] = []
+
+    async def systems_async(self):
+        return {}
+
+    async def get_volume_async(self):
+        return 12
+
+    async def get_mute_state_async(self):
+        return False
+
+    async def set_volume_async(self, volume):
+        return None
+
+    async def volume_up_async(self):
+        return None
+
+    async def volume_down_async(self):
+        return None
+
+    async def mute_toggle_async(self):
+        return None
+
+    async def get_night_mode_async(self):
+        if self.fail_night:
+            raise RuntimeError("unreachable")
+        return self.night_mode
+
+    async def set_night_mode_async(self, enabled):
+        if self.fail_night:
+            raise RuntimeError("unreachable")
+        self.night_mode_sets.append(enabled)
+        self.night_mode = enabled
+
+
+def _run_samsung_vendor_events(monkeypatch, payloads, gateway=None, **cfg_overrides):
+    from devialetctl.domain.events import InputEvent, InputEventType
+
+    sent_frames: list[str] = []
+
+    class ScriptedAdapter:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        async def async_events(self):
+            for payload in payloads:
+                yield InputEvent(
+                    kind=InputEventType.SAMSUNG_VENDOR_COMMAND,
+                    source="cec",
+                    key="SAMSUNG_VENDOR_COMMAND",
+                    vendor_subcommand=payload[0],
+                    vendor_payload=payload,
+                )
+            raise KeyboardInterrupt()
+
+        def send_tx(self, frame: str) -> bool:
+            sent_frames.append(frame)
+            return True
+
+    monkeypatch.setattr("devialetctl.application.daemon.CecKernelAdapter", ScriptedAdapter)
+    cfg = DaemonConfig(
+        target=RuntimeTarget(ip="10.0.0.2"),
+        min_interval_s=0.0,
+        dedupe_window_s=0.0,
+        **cfg_overrides,
+    )
+    gateway = gateway or _SscFakeGateway()
+    runner = DaemonRunner(cfg=cfg, gateway=gateway)
+    try:
+        runner.run_cec_forever()
+    except KeyboardInterrupt:
+        pass
+    return sent_frames, gateway, runner
+
+
+_TV_READY = (0x92, 0x03, 0x00, 0x00, 0x00, 0x00)
+_SSC_ON = {"cec_vendor_compat": "samsung", "samsung_ssc": True}
+_HANDSHAKE_STANDARD = [
+    "50:89:91:01:01:00:00:00",
+    "50:89:91:02:20:00:00:00",
+    "50:89:91:04:00:00:00:00",
+    "50:89:91:05:00:01:00:00",
+    "50:89:91:06:66:66:66:60",
+]
+
+
+def test_daemon_runner_answers_samsung_ssc_tv_ready_when_enabled(monkeypatch) -> None:
+    sent_frames, _, _ = _run_samsung_vendor_events(monkeypatch, [_TV_READY], **_SSC_ON)
+    assert sent_frames == _HANDSHAKE_STANDARD
+
+
+def test_daemon_runner_ssc_handshake_announces_devialet_night_mode(monkeypatch) -> None:
+    sent_frames, _, _ = _run_samsung_vendor_events(
+        monkeypatch, [_TV_READY], gateway=_SscFakeGateway(night_mode=True), **_SSC_ON
+    )
+    assert sent_frames[2] == "50:89:91:04:05:00:00:00"
+
+
+def test_daemon_runner_ssc_handshake_defaults_to_standard_when_unreachable(monkeypatch) -> None:
+    sent_frames, _, _ = _run_samsung_vendor_events(
+        monkeypatch, [_TV_READY], gateway=_SscFakeGateway(fail_night=True), **_SSC_ON
+    )
+    assert sent_frames == _HANDSHAKE_STANDARD
+
+
+def test_daemon_runner_ssc_sound_mode_drives_devialet_night_mode(monkeypatch) -> None:
+    sent_frames, gateway, _ = _run_samsung_vendor_events(
+        monkeypatch,
+        [
+            (0x92, 0x04, 0x05, 0x00, 0x00, 0x00),  # Night
+            (0x92, 0x04, 0x00, 0x00, 0x00, 0x00),  # Standard
+            (0x92, 0x04, 0x02, 0x00, 0x00, 0x00),  # Clear Voice: not mapped
+        ],
+        **_SSC_ON,
+    )
+    assert gateway.night_mode_sets == [True, False]
+    # TV-initiated changes are not echoed back (avoids ping-pong with the TV).
+    assert sent_frames == []
+
+
+def test_daemon_runner_ignores_samsung_ssc_by_default(monkeypatch) -> None:
+    sent_frames, gateway, _ = _run_samsung_vendor_events(
+        monkeypatch,
+        [_TV_READY, (0x92, 0x04, 0x05, 0x00, 0x00, 0x00)],
+        cec_vendor_compat="samsung",
+    )
+    assert sent_frames == []
+    assert gateway.night_mode_sets == []
+
+
+def test_daemon_runner_samsung_ssc_requires_samsung_vendor_compat(monkeypatch) -> None:
+    sent_frames, _, _ = _run_samsung_vendor_events(monkeypatch, [_TV_READY], samsung_ssc=True)
+    assert sent_frames == []
+
+
+def _ssc_runner_after_handshake(night_mode: bool) -> tuple[DaemonRunner, _SscFakeGateway]:
+    cfg = DaemonConfig(target=RuntimeTarget(ip="10.0.0.2"), **_SSC_ON)
+    gateway = _SscFakeGateway(night_mode=night_mode)
+    runner = DaemonRunner(cfg=cfg, gateway=gateway)
+    runner._ssc.handle_tv_message((0x92, 0x01, 0x01, 0x00, 0x00, 0x00))
+    runner._ssc_night_mode = False
+    runner._ssc_night_poll_interval_s = 0.0
+    return runner, gateway
+
+
+class _RecordingAdapter:
+    def __init__(self) -> None:
+        self.sent: list[str] = []
+
+    def send_tx(self, frame: str) -> bool:
+        self.sent.append(frame)
+        return True
+
+
+def test_daemon_runner_mirrors_external_night_mode_change_to_tv() -> None:
+    runner, gateway = _ssc_runner_after_handshake(night_mode=True)
+    adapter = _RecordingAdapter()
+
+    async def scenario() -> None:
+        runner._io_lock = asyncio.Lock()
+        await runner._poll_ssc_night_mode_once_async(adapter)
+        await runner._poll_ssc_night_mode_once_async(adapter)  # unchanged: nothing sent
+        gateway.night_mode = False
+        await runner._poll_ssc_night_mode_once_async(adapter)
+
+    asyncio.run(scenario())
+    assert adapter.sent == ["50:89:91:04:05:00:00:00", "50:89:91:04:00:00:00:00"]
+
+
+def test_daemon_runner_does_not_poll_night_mode_before_handshake() -> None:
+    cfg = DaemonConfig(target=RuntimeTarget(ip="10.0.0.2"), **_SSC_ON)
+    gateway = _SscFakeGateway(night_mode=True)
+    runner = DaemonRunner(cfg=cfg, gateway=gateway)
+    runner._ssc_night_poll_interval_s = 0.0
+    adapter = _RecordingAdapter()
+
+    async def scenario() -> None:
+        runner._io_lock = asyncio.Lock()
+        await runner._poll_ssc_night_mode_once_async(adapter)
+
+    asyncio.run(scenario())
+    assert adapter.sent == []

@@ -150,6 +150,7 @@ def _dispatch_command(args, cfg, resolved: _EffectiveOptions) -> None:
                     if args.cec_vendor_compat is not None
                     else cfg.cec_vendor_compat
                 ),
+                samsung_ssc=args.samsung_ssc or cfg.samsung_ssc,
             )
             runner = DaemonRunner(cfg=daemon_cfg, gateway=gateway)
             runner.run_forever(input_name=args.input)
@@ -219,6 +220,11 @@ def main() -> None:
         "--cec-vendor-compat",
         choices=["none", "samsung"],
         default=None,
+    )
+    daemon.add_argument(
+        "--samsung-ssc",
+        action="store_true",
+        help="Answer the Samsung soundbar handshake (needs --cec-vendor-compat samsung).",
     )
 
     args = p.parse_args()

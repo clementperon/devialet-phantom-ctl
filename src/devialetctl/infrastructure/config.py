@@ -28,6 +28,7 @@ class DaemonConfig:
     cec_device: str = "/dev/cec0"
     cec_osd_name: str = "Devialet"
     cec_vendor_compat: str = "none"
+    samsung_ssc: bool = False
     reconnect_delay_s: float = 2.0
     log_level: str = "INFO"
     dedupe_window_s: float = 0.08
@@ -63,6 +64,7 @@ class _DaemonConfigModel(BaseModel):
     cec_device: str = "/dev/cec0"
     cec_osd_name: str = "Devialet"
     cec_vendor_compat: str = "none"
+    samsung_ssc: bool = False
     reconnect_delay_s: float = 2.0
     log_level: str = "INFO"
     dedupe_window_s: float = 0.08
@@ -126,6 +128,7 @@ def _merge_env_overrides(data: dict[str, Any]) -> dict[str, Any]:
     env_log_level = os.getenv("DEVIALETCTL_LOG_LEVEL")
     env_cec_device = os.getenv("DEVIALETCTL_CEC_DEVICE")
     env_cec_vendor_compat = os.getenv("DEVIALETCTL_CEC_VENDOR_COMPAT")
+    env_samsung_ssc = os.getenv("DEVIALETCTL_SAMSUNG_SSC")
     if env_ip is not None:
         target_data["ip"] = env_ip
     if env_port is not None:
@@ -138,6 +141,8 @@ def _merge_env_overrides(data: dict[str, Any]) -> dict[str, Any]:
         merged["cec_device"] = env_cec_device
     if env_cec_vendor_compat is not None:
         merged["cec_vendor_compat"] = env_cec_vendor_compat
+    if env_samsung_ssc is not None:
+        merged["samsung_ssc"] = env_samsung_ssc
 
     merged["target"] = target_data
     return merged
@@ -163,6 +168,7 @@ def load_config(path: str | None = None) -> DaemonConfig:
         cec_device=parsed.cec_device,
         cec_osd_name=parsed.cec_osd_name,
         cec_vendor_compat=parsed.cec_vendor_compat,
+        samsung_ssc=parsed.samsung_ssc,
         reconnect_delay_s=parsed.reconnect_delay_s,
         log_level=parsed.log_level,
         dedupe_window_s=parsed.dedupe_window_s,
