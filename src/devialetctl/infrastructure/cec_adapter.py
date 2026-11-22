@@ -19,6 +19,7 @@ CEC_LOG_ADDR_TYPE_AUDIOSYSTEM = 4
 CEC_OP_CEC_VERSION_1_4 = 5
 CEC_OP_PRIM_DEVTYPE_AUDIOSYSTEM = 5
 CEC_OP_ALL_DEVTYPE_AUDIOSYSTEM = 0x08
+CEC_PHYS_ADDR_INVALID = 0xFFFF
 
 CEC_MODE_INITIATOR = 0x1
 CEC_MODE_FOLLOWER = 0x10
@@ -163,6 +164,18 @@ class U32(ctypes.Structure):
     _fields_ = [("value", ctypes.c_uint32)]
 
 
+class U16(ctypes.Structure):
+    _fields_ = [("value", ctypes.c_uint16)]
+
+
+def format_phys_addr(value: int) -> str:
+    if value == CEC_PHYS_ADDR_INVALID:
+        return "f.f.f.f (none)"
+    return ".".join(f"{(int(value) >> shift) & 0xF:x}" for shift in (12, 8, 4, 0))
+
+
+CEC_ADAP_G_PHYS_ADDR = _IOR("a", 1, U16)
+
 CEC_ADAP_S_LOG_ADDRS = _IOWR("a", 4, CecLogAddrs)
 CEC_ADAP_G_LOG_ADDRS = _IOR("a", 3, CecLogAddrs)
 CEC_TRANSMIT = _IOWR("a", 5, CecMsg)
@@ -284,6 +297,9 @@ class CecKernelAdapter:
     _effective_vendor_id: int | None = None
     _log_addrs_busy_retries: tuple[float, ...] = (0.1, 0.25, 0.5)
     _async_poll_interval_s: float = 0.05
+    _phys_addr_poll_interval_s: float = 2.0
+    _phys_addr: int | None = None
+    _phys_addr_checked_at: float = 0.0
 
     def _vendor_broadcast_announce_frame(self) -> str:
         vid = int(self.vendor_id) & 0xFFFFFF
@@ -296,6 +312,17 @@ class CecKernelAdapter:
     def _configure(self, fd: int) -> None:
         mode = U32(value=CEC_MODE_INITIATOR | CEC_MODE_FOLLOWER)
         fcntl.ioctl(fd, CEC_S_MODE, mode)
+        self._phys_addr = self._read_phys_addr(fd)
+        self._phys_addr_checked_at = time.monotonic()
+        if self._phys_addr == CEC_PHYS_ADDR_INVALID:
+            LOG.error(
+                "%s has no HDMI physical address: the TV is off or not driving HDMI, the "
+                "cable is unplugged, or this is the wrong /dev/cec* device (check the "
+                "HDMI port). Waiting for it to appear.",
+                self.device,
+            )
+        else:
+            LOG.info("kernel cec adapter physical address: %s", format_phys_addr(self._phys_addr))
 
         current = CecLogAddrs()
         fcntl.ioctl(fd, CEC_ADAP_G_LOG_ADDRS, current)
@@ -347,6 +374,41 @@ class CecKernelAdapter:
                     retry_delays[idx + 1],
                 )
 
+    @staticmethod
+    def _read_phys_addr(fd: int) -> int:
+        phys_addr = U16()
+        fcntl.ioctl(fd, CEC_ADAP_G_PHYS_ADDR, phys_addr)
+        return int(phys_addr.value) & 0xFFFF
+
+    def _has_phys_addr(self) -> bool:
+        return self._phys_addr is not None and self._phys_addr != CEC_PHYS_ADDR_INVALID
+
+    def _poll_phys_addr(self, fd: int) -> None:
+        """Track physical-address changes (HDMI hotplug); the kernel re-claims on its own."""
+        now = time.monotonic()
+        if now - self._phys_addr_checked_at < self._phys_addr_poll_interval_s:
+            return
+        self._phys_addr_checked_at = now
+        previous = self._phys_addr
+        try:
+            current = self._read_phys_addr(fd)
+        except OSError as exc:
+            LOG.debug("cannot read %s physical address: %s", self.device, exc)
+            return
+        if current == previous:
+            return
+        self._phys_addr = current
+        if current == CEC_PHYS_ADDR_INVALID:
+            LOG.warning("%s lost its HDMI physical address; waiting for it", self.device)
+            return
+        LOG.info("%s HDMI physical address is now %s", self.device, format_phys_addr(current))
+        if previous == CEC_PHYS_ADDR_INVALID:
+            self._announce_vendor_id()
+
+    def _announce_vendor_id(self) -> None:
+        if self.announce_vendor_id and self.spoof_vendor_id:
+            self.send_tx(self._vendor_broadcast_announce_frame())
+
     def get_effective_vendor_id(self) -> int:
         if self._effective_vendor_id is not None:
             return int(self._effective_vendor_id) & 0xFFFFFF
@@ -388,10 +450,13 @@ class CecKernelAdapter:
 
         try:
             self._configure(fd)
-            if self.announce_vendor_id and self.spoof_vendor_id:
-                self.send_tx(self._vendor_broadcast_announce_frame())
+            if self._has_phys_addr():
+                # Without a physical address there is nobody to announce to;
+                # _poll_phys_addr announces once the address appears.
+                self._announce_vendor_id()
 
             while True:
+                self._poll_phys_addr(fd)
                 try:
                     frame = self._receive_one_frame(fd)
                 except OSError as exc:
