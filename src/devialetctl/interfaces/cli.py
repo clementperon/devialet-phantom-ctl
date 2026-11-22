@@ -6,6 +6,7 @@ import os
 import sys
 
 from devialetctl.application.daemon import DaemonRunner
+from devialetctl.application.latency import LatencyService
 from devialetctl.application.ports import Target
 from devialetctl.application.service import VolumeService
 from devialetctl.infrastructure.config import load_config
@@ -161,6 +162,20 @@ def _dispatch_command(args, cfg, resolved: _EffectiveOptions) -> None:
             print(f"Daemon error: {exc}", file=sys.stderr)
             raise SystemExit(2)
 
+    if args.cmd in {"getlatency", "setlatency"}:
+        latency = LatencyService(gateway)
+        try:
+            if args.cmd == "getlatency":
+                entries = latency.get(args.source)
+            else:
+                entries = latency.set(args.source, args.value)
+        except Exception as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            raise SystemExit(2)
+        for entry in entries:
+            print(entry.describe())
+        return
+
     client = VolumeService(gateway)
     try:
         if args.cmd == "systems":
@@ -211,6 +226,19 @@ def main() -> None:
     sub.add_parser("mute")
     set_parser = sub.add_parser("setvol")
     set_parser.add_argument("value", type=int)
+    getlatency = sub.add_parser("getlatency", help="Show per-source audio latency (ms).")
+    getlatency.add_argument(
+        "--source",
+        default=None,
+        help="'current', a source type (e.g. optical) or a source id; default: all sources.",
+    )
+    setlatency = sub.add_parser("setlatency", help="Set a source's audio latency (ms).")
+    setlatency.add_argument("value", type=int)
+    setlatency.add_argument(
+        "--source",
+        default="current",
+        help="'current' (default), a source type (e.g. optical, one per speaker) or a source id.",
+    )
 
     daemon = sub.add_parser("daemon")
     daemon.add_argument("--input", choices=["cec", "keyboard"], default="cec")

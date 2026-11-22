@@ -6,6 +6,26 @@ import httpx
 from devialetctl.application.ports import VolumeGateway
 
 
+class DevialetApiError(RuntimeError):
+    """An IP Control error reply: HTTP 200 with an ``{"error": {...}}`` body."""
+
+    def __init__(self, code: str, message: str = "") -> None:
+        self.code = code
+        self.message = message
+        super().__init__(f"{code}: {message}" if message else code)
+
+
+def raise_for_api_error(data: Any) -> None:
+    error = data.get("error") if isinstance(data, dict) else None
+    if isinstance(error, dict):
+        code = str(error.get("code", "UnknownError"))
+        raise DevialetApiError(code, str(error.get("message", "")))
+
+
+def latency_path(source_id: str) -> str:
+    return f"/groups/current/sources/{source_id}/configuration/latency"
+
+
 def normalize_base_path(value: str | None) -> str:
     raw = (value or "").strip()
     if raw in {"", "/"}:
@@ -39,6 +59,12 @@ class DevialetHttpGateway(VolumeGateway):
                 json=(payload if payload is not None else {}),
             )
         r.raise_for_status()
+
+    async def _apost_json(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=self.timeout_s) as client:
+            r = await client.post(self.base_url + path, json=payload)
+        r.raise_for_status()
+        return r.json() if r.content else {}
 
     async def fetch_json_async(self, path: str) -> dict[str, Any]:
         return await self._aget(path)
@@ -90,3 +116,27 @@ class DevialetHttpGateway(VolumeGateway):
             "/systems/current/settings/audio/nightMode",
             {"nightMode": "on" if enabled else "off"},
         )
+
+    async def get_sources_async(self) -> list[dict[str, Any]]:
+        data = await self._aget("/groups/current/sources")
+        raise_for_api_error(data)
+        return list(data.get("sources", []))
+
+    async def get_current_source_async(self) -> dict[str, Any]:
+        data = await self._aget("/groups/current/sources/current")
+        raise_for_api_error(data)
+        source = data.get("source")
+        if not isinstance(source, dict):
+            raise ValueError(f"Unexpected response: {data}")
+        return source
+
+    async def get_latency_async(self, source_id: str = "current") -> dict[str, Any]:
+        data = await self._aget(latency_path(source_id))
+        raise_for_api_error(data)
+        if "latency" not in data:
+            raise ValueError(f"Unexpected response: {data}")
+        return data
+
+    async def set_latency_async(self, source_id: str, latency_ms: int) -> None:
+        data = await self._apost_json(latency_path(source_id), {"latency": int(latency_ms)})
+        raise_for_api_error(data)
