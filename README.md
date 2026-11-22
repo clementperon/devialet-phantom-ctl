@@ -103,7 +103,14 @@ The daemon:
   - `0x96` (`SYNC_TV_VOLUME`, absolute volume) -> applies it, no response
   - `0x88` (`MODEL_NAME`) -> replies `50:89:88:<name>` (the TV keeps at most 13 bytes)
   - `0xA2` (`GIVE_2ND_DEPTH_DEVICE_STATUS`) -> replies `50:89:A3:00` (nothing behind the soundbar's HDMI inputs)
-  - `0x92` (receiver option data from a TV app), `0x87` (sound mode) and other subcommands -> no response
+  - `0x92` (Samsung soundbar protocol, see below), `0x87` (sound mode) and other subcommands -> no response
+- with `samsung_ssc = true` (or `--samsung-ssc`, or `DEVIALETCTL_SAMSUNG_SSC=true`), also speaks the Samsung soundbar protocol carried in `0x89`/`0x92` (TV -> soundbar) and `0x89`/`0x91` (soundbar -> TV), experimental, off by default:
+  - when the TV sends `TV_READY` (`92:03`) at power-on, completes the protocol-1 handshake (sound modes Standard and Night, flat EQ, neutral woofer); the TV then enables its soundbar sound settings
+  - the TV's sound mode drives the Devialet night mode: Night -> `nightMode` on, Standard -> off; the handshake announces the current night mode
+  - night-mode changes made elsewhere (e.g. the Devialet app) are sent to the TV (`91:04`) so its menu stays in sync
+  - EQ and woofer changes from the TV are logged, not applied yet
+  - never advertises Q-Symphony support (TV speakers playing together with the soundbar)
+  - needs `cec_vendor_compat = "samsung"`
 - with `cec_vendor_compat = "samsung"`, consumes Samsung vendor command-with-id `0xA0` (e.g. `00:00:F0:21` device capability query) without responding; the TV times out and keeps using `0x88`
 - the TV only uses these vendor commands with devices that report vendor ID `00:00:F0`
 - applies absolute volume from TV `SET_AUDIO_VOLUME_LEVEL` (`0x73`)
@@ -155,6 +162,7 @@ log_level = "INFO"
 cec_device = "/dev/cec0"
 cec_osd_name = "Devialet"
 cec_vendor_compat = "none"
+samsung_ssc = false
 reconnect_delay_s = 2.0
 dedupe_window_s = 0.08
 min_interval_s = 0.12

@@ -78,3 +78,15 @@ class DevialetHttpGateway(VolumeGateway):
             await self._apost("/groups/current/sources/current/playback/unmute")
         else:
             await self._apost("/groups/current/sources/current/playback/mute")
+
+    async def get_night_mode_async(self) -> bool:
+        data = await self._aget("/systems/current/settings/audio/nightMode")
+        if "nightMode" not in data:
+            raise ValueError(f"Unexpected response: {data}")
+        return str(data["nightMode"]).lower() == "on"
+
+    async def set_night_mode_async(self, enabled: bool) -> None:
+        await self._apost(
+            "/systems/current/settings/audio/nightMode",
+            {"nightMode": "on" if enabled else "off"},
+        )

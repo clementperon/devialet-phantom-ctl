@@ -75,3 +75,17 @@ def test_load_config_env_overrides_vendor_compat(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("DEVIALETCTL_CEC_VENDOR_COMPAT", "samsung")
     cfg = load_config(str(cfg_file))
     assert cfg.cec_vendor_compat == "samsung"
+
+
+def test_load_config_samsung_ssc_defaults_off(tmp_path) -> None:
+    cfg_file = tmp_path / "config.toml"
+    cfg_file.write_text("", encoding="utf-8")
+    assert load_config(str(cfg_file)).samsung_ssc is False
+
+
+def test_load_config_samsung_ssc_from_toml_and_env(monkeypatch, tmp_path) -> None:
+    cfg_file = tmp_path / "config.toml"
+    cfg_file.write_text("samsung_ssc = true\n", encoding="utf-8")
+    assert load_config(str(cfg_file)).samsung_ssc is True
+    monkeypatch.setenv("DEVIALETCTL_SAMSUNG_SSC", "false")
+    assert load_config(str(cfg_file)).samsung_ssc is False

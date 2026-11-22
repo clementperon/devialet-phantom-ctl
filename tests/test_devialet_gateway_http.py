@@ -126,3 +126,40 @@ def test_gateway_mute_toggle_uses_group_unmute(monkeypatch) -> None:
     monkeypatch.setattr(gw, "_aget", fake_aget)
     asyncio.run(gw.mute_toggle_async())
     assert post_calls[0][0] == "/groups/current/sources/current/playback/unmute"
+
+
+def test_gateway_night_mode(monkeypatch) -> None:
+    gw = DevialetHttpGateway(address="10.0.0.2")
+    posts = []
+
+    async def fake_aget(path):
+        assert path == "/systems/current/settings/audio/nightMode"
+        return {"nightMode": "on"}
+
+    async def fake_apost(path, payload=None):
+        posts.append((path, payload))
+
+    monkeypatch.setattr(gw, "_aget", fake_aget)
+    monkeypatch.setattr(gw, "_apost", fake_apost)
+
+    assert asyncio.run(gw.get_night_mode_async()) is True
+    asyncio.run(gw.set_night_mode_async(False))
+    asyncio.run(gw.set_night_mode_async(True))
+    assert posts == [
+        ("/systems/current/settings/audio/nightMode", {"nightMode": "off"}),
+        ("/systems/current/settings/audio/nightMode", {"nightMode": "on"}),
+    ]
+
+
+def test_gateway_night_mode_rejects_unexpected_payload(monkeypatch) -> None:
+    gw = DevialetHttpGateway(address="10.0.0.2")
+
+    async def fake_aget(_path):
+        return {"error": {"code": "SystemLeaderAbsent"}}
+
+    monkeypatch.setattr(gw, "_aget", fake_aget)
+    try:
+        asyncio.run(gw.get_night_mode_async())
+        assert False, "expected ValueError"
+    except ValueError as exc:
+        assert "Unexpected response" in str(exc)
